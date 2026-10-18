@@ -40,7 +40,7 @@ In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add 
 - **Compact when collapsed.** Collapsed, one line shows every decision's state (`T1 ✓ · T2 ✗ ·
   T3 ○ ✎`), shrinking to `1 open and 2 decided · 2 ✎` when space runs out.
 
-  ![The collapsed bar: one line with the state of each decision and Send all](docs/collapsed.png)
+  ![Collapsed, the bar shrinks to one line and leaves the space above it free for the conversation](docs/collapsed.png)
 
 - **Any language.** The bar's buttons, counts and messages follow the chat language. English is
   built in; for any other language Claude supplies the texts once, the mod checks them and keeps
