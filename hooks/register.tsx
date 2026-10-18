@@ -807,6 +807,16 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A group of tool calls folds into one line ("Used 2 tools"); one holding a decision box stays
+  // open, so the box is visible without expanding the group.
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    const isOurs = (tool: string) => tool === TOOL_FULL || tool.endsWith(`decision-bar__${TOOL}`)
+    if (e.props.isExpanded || !e.props.calls.some(c => isOurs(c.tool))) {
+      return next(e)
+    }
+    return next({ ...e, props: { ...e.props, isExpanded: true } })
+  })
+
   // In the chat: the tool call's own row becomes a box with the decisions it proposed, drawn like
   // the bar's rows and sharing their state, so you can decide in context and scroll back later. A
   // decision that left the bar shows its sent answer, or "closed" when the bar no longer knows it.
@@ -824,7 +834,8 @@ export const register: Register = on => {
     const els = $.ui.resolve(e) as unknown as Elements
     const list = await read($, proposals)
     const prefix = `chat-${e.props.tool_use_id}-`
-    const v = await rowView($, els, e.surface, list, prefix, e.viewport?.columns ?? 100)
+    // Columns 0: the field takes its minimum width, so it stays on the row inside the box.
+    const v = await rowView($, els, e.surface, list, prefix, 0)
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const indexOf = (p: Proposal) => list.findIndex(o => !o.options && rowKey(o) === rowKey(p))

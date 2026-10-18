@@ -759,3 +759,31 @@ test('the chat box sends only its own decisions, and then shows the sent answers
   const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await bar.find({ key: 'agree-0' })).toBeDefined()
 })
+
+test('a group of tool calls with a decision box stays open; other groups are left alone', async ($, on) => {
+  const seen: boolean[] = []
+  on('ui.render', ($, e) => {
+    if (e.component === 'ToolGroup') {
+      seen.push((e.props as { isExpanded: boolean }).isExpanded)
+    }
+    const { Box } = $.ui.resolve(e)
+    return <Box key="group" />
+  })
+  const group = (tool: string) =>
+    ({
+      plugin: 'decision-bar',
+      surface: 'desktop',
+      component: 'ToolGroup',
+      props: {
+        calls: [
+          { tool: 'Bash', input: {}, isRunning: false },
+          { tool, input: {}, isRunning: false },
+        ],
+        isActive: false,
+        isExpanded: false,
+      } as unknown as RenderPropsOf['ToolGroup'],
+    }) as const
+  await $.ui.mount(group(TOOL))
+  await $.ui.mount(group('Read'))
+  expect(seen).toEqual([true, false])
+})
