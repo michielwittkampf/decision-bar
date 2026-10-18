@@ -5,7 +5,7 @@ losing track of them.
 
 When Claude needs your input, the decisions it proposes go into a bar above the input field
 instead of interrupting the conversation. They wait there while you keep working: do some
-research, ask Claude a question in between, look into something else. Answer them when you are
+research, ask Claude to change something in between, look into something else. Answer them when you are
 ready, in the order you choose — agree or disagree, add a remark, send one or all at once. The
 bar always shows what is still open and what you have already decided.
 
