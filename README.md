@@ -28,8 +28,8 @@ In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add 
 - **One row per decision.** Whenever Claude asks you to decide something, each decision appears
   with its label and proposal, `○ agree` / `○ disagree`, a remark field and `send`.
 - **Send one or all.** `Send all` and `Agree to all` at the bottom (`Send` and `Agree` for a
-  single row). Answers reach the chat as `T1 agree: <proposal>`, with any remark below it as
-  `↳ Remark: …` and a blank line between answers.
+  single row). Answers reach the chat as `T1 agree: <proposal>` (or `T1 (no decision yet)`),
+  any remark on its own line below as `↳ Remark: …`, and a blank line between answers.
 - **It stays out of your way.** Rows stay while you chat and while Claude works; Claude updates
   them by label and removes the ones you answered in the chat. `Hide` clears the bar and
   remembers what you hid; `Restore` or `/decisions` brings it back.

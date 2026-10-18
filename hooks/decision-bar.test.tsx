@@ -43,7 +43,7 @@ const NL = {
   nothingToSendAnswer: 'Niets te versturen: typ eerst een antwoord.',
   nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord, of typ een opmerking.',
   messageDecision: '{label} {decision}: {proposal}',
-  messageNoDecision: '{label} (nog geen beslissing), opmerking: {remark}',
+  undecided: '{label} (nog geen beslissing)',
   messageRemark: 'Opmerking: {remark}',
   messageQuestion: 'Op je vraag "{question}": {answer}',
   commandRestored: '{n} beslissing(en) staan weer boven het invoerveld.',
@@ -120,7 +120,7 @@ test('"Send all" sends decisions and remarks; undecided rows stay', async ($, on
   await ui.press({ key: 'send-all' })
 
   expect(sent).toEqual([
-    'T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n↳ Remark: rather purple\n\nT3 (no decision yet), remark: why four?',
+    'T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n↳ Remark: rather purple\n\nT3 (no decision yet)\n↳ Remark: why four?',
   ])
 
   await ui.redraw()
@@ -154,7 +154,7 @@ test('a remark without a decision on one row: the row stays open', async ($, on)
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-0', text: 'why tea?' })
-  expect(sent).toEqual(['T1 (no decision yet), remark: why tea?'])
+  expect(sent).toEqual(['T1 (no decision yet)\n↳ Remark: why tea?'])
 
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /^T1$/ })).toBeDefined()
@@ -345,14 +345,14 @@ test('a remark without a decision: confirmation in the row, and not sent twice',
   // Sending the same text again (the field still showed it): nothing.
   await ui.input({ key: 'remark-2', text: 'sdfsfaaaa' })
   await ui.input({ key: 'remark-2', text: 'sdfsfaaaa' })
-  expect(sent).toEqual(['T3 (no decision yet), remark: sdfsfaaaa'])
+  expect(sent).toEqual(['T3 (no decision yet)\n↳ Remark: sdfsfaaaa'])
 
   // Another remark does go, and the confirmation disappears while typing.
   await ui.input({ key: 'remark-2', text: 'something else', kind: 'change' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /remark sent/ })).toBeUndefined()
   await ui.input({ key: 'remark-2', text: 'something else' })
-  expect(sent.at(-1)).toBe('T3 (no decision yet), remark: something else')
+  expect(sent.at(-1)).toBe('T3 (no decision yet)\n↳ Remark: something else')
 })
 
 test('a decision after an earlier remark is sent normally', async ($, on) => {
@@ -363,7 +363,7 @@ test('a decision after an earlier remark is sent normally', async ($, on) => {
   await ui.input({ key: 'remark-0', text: 'hmm' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-0', text: 'hmm' })
-  expect(sent).toEqual(['T1 (no decision yet), remark: hmm', 'T1 agree: tea on Tuesday\n↳ Remark: hmm'])
+  expect(sent).toEqual(['T1 (no decision yet)\n↳ Remark: hmm', 'T1 agree: tea on Tuesday\n↳ Remark: hmm'])
 })
 
 test("answered in the app's own box: the question also leaves the bar", async ($, on) => {
@@ -426,7 +426,7 @@ test('the send button with an empty field passed still sends the typed remark', 
   await ui.input({ key: 'remark-1', text: 'discuss first', kind: 'change' })
   // As the app may do on a click on the button: Enter with an empty field.
   await ui.input({ key: 'remark-1', text: '' })
-  expect(sent).toEqual(['T2 (no decision yet), remark: discuss first'])
+  expect(sent).toEqual(['T2 (no decision yet)\n↳ Remark: discuss first'])
 })
 
 test('a long remark is shown in full below the field', async ($, on) => {
@@ -461,7 +461,7 @@ test('collapsing shows a summary; expanding brings the rows back', async ($, on)
 
   // Collapsed you can still send everything.
   await ui.press({ key: 'send-all' })
-  expect(sent.at(-1)).toBe('T1 agree: tea on Tuesday\n\nT3 (no decision yet), remark: with felt pads')
+  expect(sent.at(-1)).toBe('T1 agree: tea on Tuesday\n\nT3 (no decision yet)\n↳ Remark: with felt pads')
 
   await ui.press({ key: 'toggle' })
   await ui.redraw()
@@ -625,7 +625,7 @@ test('typed text stays when the bar redraws for another reason', async ($, on) =
   await ui.redraw()
   expect((await ui.find({ key: 'remark-1' }))?.text).toContain('half typed')
   await ui.press({ key: 'send-all' })
-  expect(sent.at(-1)).toContain('T2 (no decision yet), remark: half typed')
+  expect(sent.at(-1)).toContain('T2 (no decision yet)\n↳ Remark: half typed')
 })
 
 test('the full text is struck through while typing and comes back updated on another action', async ($, on) => {

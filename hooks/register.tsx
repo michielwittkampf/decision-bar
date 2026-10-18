@@ -53,7 +53,7 @@ const EN = {
   nothingToSendAnswer: 'Nothing to send: type an answer first.',
   nothingToSendDecision: 'Nothing to send: choose agree or disagree, or type a remark.',
   messageDecision: '{label} {decision}: {proposal}',
-  messageNoDecision: '{label} (no decision yet), remark: {remark}',
+  undecided: '{label} (no decision yet)',
   messageRemark: 'Remark: {remark}',
   messageQuestion: 'On your question "{question}": {answer}',
   commandRestored: '{n} decision(s) back above the prompt.',
@@ -222,7 +222,7 @@ const INSTRUCTIONS = [
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only when the bar would show in the wrong language: (1) right before you end a turn with a question and answer buttons in the next-step box (the bar copies it) while the chat is not in the bar language, or (2) at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
-  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>" or as a remark without a decision, possibly with a remark below, in the bar language.',
+  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>" or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
   'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
 ].join('\n')
 
@@ -233,7 +233,8 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
     return r ? t('messageQuestion', { question: p.text, answer: r }) : ''
   }
   if (decision === null) {
-    return r ? t('messageNoDecision', { label: p.label, remark: r }) : ''
+    // The remark always goes on its own line, so it is never mistaken for the proposal.
+    return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
   }
   const core = t('messageDecision', {
     label: p.label,
