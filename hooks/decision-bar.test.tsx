@@ -40,6 +40,7 @@ const NL = {
   restoreLater: '(later terug met /{command})',
   restore: 'Terughalen',
   close: 'Sluiten',
+  closed: 'gesloten',
   nothingToSendAnswer: 'Niets te versturen: typ eerst een antwoord.',
   nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord, of typ een opmerking.',
   messageDecision: '{label} {decision}: {proposal}',
@@ -721,7 +722,40 @@ test('the tool call row in the chat shows the decisions, and a press there sets 
     } as unknown as RenderPropsOf['ToolUse'],
   })
   expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
-  await row.press({ key: 'chat-agree-call-1-1' })
+  await row.press({ key: 'chat-call-1-agree-1' })
   const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await bar.find({ key: 'agree-1' }))?.text).toContain('●')
+})
+
+test('the chat box sends only its own decisions, and then shows the sent answers', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[2]!] })
+  const box = {
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: PROPOSALS.slice(0, 2) },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  } as const
+  const row = await $.ui.mount(box)
+  await row.press({ key: 'chat-call-1-agree-0' })
+  await row.press({ key: 'chat-call-1-disagree-1' })
+  await row.input({ key: 'chat-call-1-remark-1', text: 'rather purple', kind: 'change' })
+  await row.press({ key: 'chat-call-1-send-box' })
+  expect(sent.at(-1)).toBe('T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n↳ Remark: rather purple')
+
+  await row.redraw()
+  expect(await row.find({ type: 'Text', text: '✓ agree' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
+  // T3 came from another call and is still open in the bar.
+  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await bar.find({ key: 'agree-0' })).toBeDefined()
 })

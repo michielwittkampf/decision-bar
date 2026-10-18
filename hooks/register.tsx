@@ -22,6 +22,8 @@ const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, fa
 // Proposals (`rowKey`) whose field is being edited: their full-remark line is struck through,
 // as visibly stale text next to the field.
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
+// The decision sent per proposal (`rowKey`), so its box in the chat can show what was answered.
+const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, 'agree' | 'disagree'>)
 
 // The bar's own texts. Only English is built in; any other chat language gets them once from
 // Claude (`translation` in the tool) and the mod keeps them per language in `$.store`.
@@ -49,6 +51,7 @@ const EN = {
   restoreLater: '(restore later with /{command})',
   restore: 'Restore',
   close: 'Close',
+  closed: 'closed',
   nothingToSendAnswer: 'Nothing to send: type an answer first.',
   nothingToSendDecision: 'Nothing to send: choose agree or disagree, or type a remark.',
   messageDecision: '{label} {decision}: {proposal}',
@@ -352,6 +355,18 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     }
     return remembered
   })
+  // Remember what was decided, so the decision's box in the chat can show it.
+  await update($, sentDecisions, old => {
+    const recorded: Record<string, 'agree' | 'disagree'> = { ...(old as Record<string, 'agree' | 'disagree'>) }
+    for (const i of indexes) {
+      const p = list[i]
+      const d = dec[i] ?? null
+      if (p && !p.options && d !== null) {
+        recorded[rowKey(p)] = d
+      }
+    }
+    return recorded
+  })
   // A blank line between answers, so each stands on its own in the chat.
   await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
@@ -422,6 +437,169 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
   ]
     .filter(Boolean)
     .join(' ')
+}
+
+// The elements of one surface, as `$.ui.resolve` hands them out (the same for the bar and a
+// chat row); `Input` is missing on mobile.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Elements = { Box: any; Button: any; Text: any; Input?: any }
+
+// What the bar and the chat boxes share to draw decision rows: the elements, the state and the
+// handlers, with element keys under `prefix` so the bar's and each box's elements stay apart.
+const rowView = async (
+  $: EngineInterface,
+  els: Elements,
+  surface: string,
+  list: Proposal[],
+  prefix: string,
+  columns: number,
+) => {
+  const { Box, Button, Text, Input } = els
+  const t = translator(await read($, texts))
+  const dec = await read($, decisions)
+  const stored = await read($, remarks)
+  const rem = currentRemarks(list, stored)
+  const sent = await read($, sentRemarks)
+  const beingEdited = await read($, editing)
+  // The line shows the last committed text; while the field is edited it is struck through:
+  // visibly stale, until the next action updates it.
+  const showFull = (i: number) => (stored[i]?.trim().length ?? 0) > LONG_REMARK
+  const isStale = (p: Proposal) => beingEdited.includes(rowKey(p))
+
+  // Typing does not redraw (see `drafts`); only clearing "✓ remark sent" or striking through the
+  // full remark does, once.
+  const setRemark = async (i: number, text: string) => {
+    const p = list[i]
+    if (!p) {
+      return
+    }
+    const field = `${prefix}remark-${i}`
+    // Typed in another field first: that is another action, the other field is committed.
+    // Works also where the app does not report focus moves to the mod.
+    if (lastField !== undefined && lastField !== field) {
+      await commitDrafts($)
+    }
+    drafts.set(rowKey(p), text)
+    lastField = field
+    if ((stored[i]?.trim().length ?? 0) > LONG_REMARK && !beingEdited.includes(rowKey(p))) {
+      await update($, editing, old => [...old, rowKey(p)])
+    }
+    if (sent[rowKey(p)] !== undefined && sent[rowKey(p)] !== text.trim()) {
+      await update($, sentRemarks, old => {
+        const { [rowKey(p)]: _gone, ...rest } = old
+        return rest
+      })
+    }
+  }
+  // Enter or the "send" button next to a field: only that row. If the app passes an empty field
+  // with the button, the typed remark stays; if nothing goes out, a toast says so.
+  const keepAndSend = async (i: number, text: string) => {
+    if (text.trim() !== '') {
+      await setRemark(i, text)
+    }
+    const done = await send($, [i])
+    if (!done) {
+      $.ui.toast(list[i]?.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
+    }
+  }
+  // Pressing the chosen state again sets it back to "no decision".
+  const choose = (i: number, decision: Exclude<Decision, null>) =>
+    commitDrafts($).then(() =>
+      update($, decisions, old => {
+        const choices = list.map((_, j) => old[j] ?? null)
+        choices[i] = choices[i] === decision ? null : decision
+        return choices
+      }),
+    )
+
+  // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
+  const roomy = surface !== 'terminal'
+  // A question from the next-step box is called "Question" in the bar's language.
+  const shownLabel = (p: Proposal) => (p.options ? t('question') : p.label)
+  // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
+  // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
+  const labelWidth = Math.min(14, Math.max(...list.map(p => [...shownLabel(p)].length)) + 2)
+  // A word longer than the column is broken with a hyphen. Outside the terminal soft hyphens let
+  // the app break only where proportional text really needs it; the terminal gets hard breaks.
+  const labelText = (p: Proposal) => breakLongWords(shownLabel(p), labelWidth - 1, roomy)
+  // The field as wide as the line allows next to the buttons before it and "send" after it. The
+  // desktop app draws an Input at its own width; this only takes effect in the terminal.
+  const fieldWidth = (buttons: string[]) =>
+    Math.max(
+      20,
+      columns - (roomy ? 1 : 0) - (labelWidth + 1) - [...buttons, t('send')].reduce((sum, b) => sum + buttonWidth(b), 0) - 1,
+    )
+  return {
+    Box, Button, Text, Input, t, prefix, dec, stored, rem, sent, showFull, isStale,
+    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth,
+  }
+}
+type RowView = Awaited<ReturnType<typeof rowView>>
+
+// One decision row: label, proposal, agree / disagree, remark field and its full text below.
+const decisionRow = (v: RowView, p: Proposal, i: number) => {
+  const { Box, Button, Text, Input, t, prefix: k, dec, rem, sent, stored, showFull, isStale } = v
+  return (
+    // Outside the terminal some air around the buttons, and clearly more between rows.
+    <Box key={`${k}row-${i}`} flexDirection="column" rowGap={v.roomy ? 1 : 0} marginTop={v.roomy && i > 0 ? 1 : 0}>
+      <Box key={`${k}top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
+        <Box key={`${k}label-box-${i}`} width={v.labelWidth} flexShrink={0}>
+          <Text key={`${k}label-${i}`} bold>
+            {v.labelText(p)}
+          </Text>
+        </Box>
+        <Box key={`${k}proposal-box-${i}`} flexGrow={1} flexShrink={1}>
+          <Text key={`${k}proposal-${i}`}>{p.text}</Text>
+        </Box>
+      </Box>
+      <Box
+        key={`${k}choice-${i}`}
+        flexDirection="row"
+        alignItems="center"
+        flexWrap="wrap"
+        columnGap={1}
+        marginLeft={v.labelWidth + 1}
+      >
+        <Button
+          key={`${k}agree-${i}`}
+          label={`${dec[i] === 'agree' ? '●' : '○'} ${t('agree')}`}
+          variant={dec[i] === 'agree' ? 'primary' : 'secondary'}
+          onPress={() => v.choose(i, 'agree')}
+        />
+        <Button
+          key={`${k}disagree-${i}`}
+          label={`${dec[i] === 'disagree' ? '●' : '○'} ${t('disagree')}`}
+          variant={dec[i] === 'disagree' ? 'primary' : 'secondary'}
+          onPress={() => v.choose(i, 'disagree')}
+        />
+        {Input && (
+          <Box key={`${k}field-${i}`} flexGrow={1} minWidth={20} width={v.fieldWidth([`○ ${t('agree')}`, `○ ${t('disagree')}`])}>
+            <Input
+              key={`${k}remark-${i}`}
+              placeholder={t('remarkField')}
+              value={rem[i] ?? ''}
+              // Enter or the button: send only this row; the rest stays.
+              submitLabel={t('send')}
+              onInput={(text: string) => void v.setRemark(i, text)}
+              onSubmit={(text: string) => void v.keepAndSend(i, text)}
+            />
+          </Box>
+        )}
+        {sent[rowKey(p)] !== undefined && !rem[i]?.trim() && (
+          <Text key={`${k}sent-${i}`} dimColor>
+            {t('remarkSent')}
+          </Text>
+        )}
+      </Box>
+      {showFull(i) && (
+        <Box key={`${k}full-${i}`} marginLeft={v.labelWidth + 1}>
+          <Text key={`${k}full-remark-${i}`} dimColor strikethrough={isStale(p)}>
+            {stored[i]}
+          </Text>
+        </Box>
+      )}
+    </Box>
+  )
 }
 
 export const register: Register = on => {
@@ -629,60 +807,80 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // In the chat: the tool call's own row shows the decisions it proposed, with the same agree /
-  // disagree as the bar. A decision that is no longer open shows as answered.
+  // In the chat: the tool call's own row becomes a box with the decisions it proposed, drawn like
+  // the bar's rows and sharing their state, so you can decide in context and scroll back later. A
+  // decision that left the bar shows its sent answer, or "closed" when the bar no longer knows it.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (!(e.props.tool === TOOL_FULL || e.props.tool.endsWith(`decision-bar__${TOOL}`))) {
       return next(e)
     }
     const input = e.props.input as { proposals?: unknown }
-    const asked = (Array.isArray(input?.proposals) ? input.proposals : []).filter(
-      (p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string',
-    )
+    const asked = (Array.isArray(input?.proposals) ? input.proposals : [])
+      .filter((p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string')
+      .map((p): Proposal => ({ label: p.label.trim(), text: p.text.trim() || p.label.trim() }))
     if (asked.length === 0) {
       return next(e)
     }
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const t = translator(await read($, texts))
-    const [list, dec] = await Promise.all([read($, proposals), read($, decisions)])
-    const callId = e.props.tool_use_id
+    const els = $.ui.resolve(e) as unknown as Elements
+    const list = await read($, proposals)
+    const prefix = `chat-${e.props.tool_use_id}-`
+    const v = await rowView($, els, e.surface, list, prefix, e.viewport?.columns ?? 100)
+    const { Box, Button, Text, t } = v
+    const done = await read($, sentDecisions)
+    const indexOf = (p: Proposal) => list.findIndex(o => !o.options && rowKey(o) === rowKey(p))
+    const openIndexes = asked.map(indexOf).filter(i => i >= 0)
+    const openList = openIndexes.map(i => list[i]!)
+    const openDec = openIndexes.map(i => v.dec[i] ?? null)
+    const openRem = openIndexes.map(i => v.rem[i] ?? '')
+    const sendBox = async () => {
+      if (!(await send($, openIndexes))) {
+        $.ui.toast(t('nothingToSendDecision'))
+      }
+    }
     return (
       <Box flexDirection="column" rowGap={1} borderStyle="round" paddingX={1}>
+        <Box key={`${prefix}heading`} flexDirection="row" columnGap={1}>
+          <Text key={`${prefix}title`} bold>
+            {t('heading')}
+          </Text>
+          <Text key={`${prefix}tally`} dimColor>
+            {headingTally(t, openList, openDec, openRem)}
+          </Text>
+        </Box>
         {asked.map((p, k) => {
-          const i = list.findIndex(o => !o.options && o.label === p.label.trim())
-          const open = i >= 0 && list[i]!.text === p.text.trim()
-          const d = open ? (dec[i] ?? null) : null
+          const i = indexOf(p)
+          if (i >= 0) {
+            return decisionRow(v, list[i]!, i)
+          }
+          const answer = done[rowKey(p)]
           return (
-            <Box key={`chat-${callId}-${k}`} flexDirection="column">
-              <Text key={`chat-text-${callId}-${k}`}>
-                <Text key={`chat-label-${callId}-${k}`} bold>
-                  {p.label}
-                </Text>{' '}
-                {p.text}
-              </Text>
-              {open ? (
-                <Box key={`chat-choice-${callId}-${k}`} flexDirection="row" columnGap={1}>
-                  <Button
-                    key={`chat-agree-${callId}-${k}`}
-                    label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
-                    variant={d === 'agree' ? 'primary' : 'secondary'}
-                    onPress={() => chooseByLabel($, p.label.trim(), 'agree')}
-                  />
-                  <Button
-                    key={`chat-disagree-${callId}-${k}`}
-                    label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
-                    variant={d === 'disagree' ? 'primary' : 'secondary'}
-                    onPress={() => chooseByLabel($, p.label.trim(), 'disagree')}
-                  />
-                </Box>
-              ) : (
-                <Text key={`chat-done-${callId}-${k}`} dimColor>
-                  ✓
+            <Box key={`${prefix}closed-${k}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
+              <Box key={`${prefix}closed-label-box-${k}`} width={v.labelWidth} flexShrink={0}>
+                <Text key={`${prefix}closed-label-${k}`} bold dimColor>
+                  {breakLongWords(p.label, v.labelWidth - 1, v.roomy)}
                 </Text>
-              )}
+              </Box>
+              <Box key={`${prefix}closed-text-box-${k}`} flexDirection="column" flexGrow={1} flexShrink={1}>
+                <Text key={`${prefix}closed-text-${k}`} dimColor>
+                  {p.text}
+                </Text>
+                <Text key={`${prefix}closed-answer-${k}`} dimColor>
+                  {answer === 'agree' ? `✓ ${t('agree')}` : answer === 'disagree' ? `✗ ${t('disagree')}` : t('closed')}
+                </Text>
+              </Box>
             </Box>
           )
         })}
+        {openIndexes.length > 0 && (
+          <Box key={`${prefix}actions`} flexDirection="row" columnGap={1}>
+            <Button
+              key={`${prefix}send-box`}
+              label={t(openIndexes.length === 1 ? 'sendOne' : 'sendAll')}
+              variant="primary"
+              onPress={() => void sendBox()}
+            />
+          </Box>
+        )}
       </Box>
     )
   })
@@ -719,84 +917,8 @@ export const register: Register = on => {
       )
     }
 
-    // Mobile has no Input: only the buttons there.
-    const Input = 'Input' in table ? table.Input : undefined
-    const dec = await read($, decisions)
-    const stored = await read($, remarks)
-    const rem = currentRemarks(list, stored)
-    const sent = await read($, sentRemarks)
-    const beingEdited = await read($, editing)
-    // The line shows the last committed text; while the field is edited it is struck through:
-    // visibly stale, until the next action updates it.
-    const showFull = (i: number) => (stored[i]?.trim().length ?? 0) > LONG_REMARK
-    const isStale = (p: Proposal) => beingEdited.includes(rowKey(p))
-
-    // Typing does not redraw the bar (see `drafts`); only clearing "✓ remark sent" or striking
-    // through the full remark does, once.
-    const setRemark = async (i: number, text: string) => {
-      const p = list[i]
-      if (!p) {
-        return
-      }
-      // Typed in another field first: that is another action, the other field is committed.
-      // Works also where the app does not report focus moves to the mod.
-      if (lastField !== undefined && lastField !== `remark-${i}`) {
-        await commitDrafts($)
-      }
-      drafts.set(rowKey(p), text)
-      lastField = `remark-${i}`
-      if ((stored[i]?.trim().length ?? 0) > LONG_REMARK && !beingEdited.includes(rowKey(p))) {
-        await update($, editing, old => [...old, rowKey(p)])
-      }
-      if (sent[rowKey(p)] !== undefined && sent[rowKey(p)] !== text.trim()) {
-        await update($, sentRemarks, old => {
-          const { [rowKey(p)]: _gone, ...rest } = old
-          return rest
-        })
-      }
-    }
-    // Enter or the "send" button next to a field: only that row. If the app passes an empty field
-    // with the button, the typed remark stays; if nothing goes out, a toast says so.
-    const keepAndSend = async (i: number, text: string) => {
-      if (text.trim() !== '') {
-        await setRemark(i, text)
-      }
-      const done = await send($, [i])
-      if (!done) {
-        $.ui.toast(list[i]?.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
-      }
-    }
-    // Pressing the chosen state again sets it back to "no decision".
-    const choose = (i: number, decision: Exclude<Decision, null>) =>
-      commitDrafts($).then(() =>
-        update($, decisions, old => {
-          const choices = list.map((_, j) => old[j] ?? null)
-          choices[i] = choices[i] === decision ? null : decision
-          return choices
-        }),
-      )
-
-    // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
-    const roomy = e.surface !== 'terminal'
-    // A question from the next-step box is called "Question" in the bar's language.
-    const shownLabel = (p: Proposal) => (p.options ? t('question') : p.label)
-    // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
-    // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
-    const labelWidth = Math.min(14, Math.max(...list.map(p => [...shownLabel(p)].length)) + 2)
-    // A word longer than the column is broken with a hyphen. Outside the terminal soft hyphens let
-    // the app break only where proportional text really needs it; the terminal gets hard breaks.
-    const labelText = (p: Proposal) => breakLongWords(shownLabel(p), labelWidth - 1, roomy)
-    // The field as wide as the line allows next to the buttons before it and "send" after it. The
-    // desktop app draws an Input at its own width; this only takes effect in the terminal.
-    const fieldWidth = (buttons: string[]) =>
-      Math.max(
-        20,
-        e.props.bodyColumns -
-          (roomy ? 1 : 0) -
-          (labelWidth + 1) -
-          [...buttons, t('send')].reduce((sum, b) => sum + buttonWidth(b), 0) -
-          1,
-      )
+    const v = await rowView($, table as Elements, e.surface, list, '', e.props.bodyColumns)
+    const { Input, dec, stored, rem, showFull, isStale, setRemark, keepAndSend, roomy, labelWidth, labelText, fieldWidth } = v
     const hasDecisions = list.some(p => !p.options)
     const all = list.map((_, i) => i)
     // With one row no "all": you would look for what else goes along.
@@ -911,70 +1033,7 @@ export const register: Register = on => {
                 )}
               </Box>
             ) : (
-              // Outside the terminal some air around the buttons, and clearly more between rows.
-              <Box key={`row-${i}`} flexDirection="column" rowGap={roomy ? 1 : 0} marginTop={roomy && i > 0 ? 1 : 0}>
-                <Box key={`top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
-                  <Box key={`label-box-${i}`} width={labelWidth} flexShrink={0}>
-                    <Text key={`label-${i}`} bold>
-                      {labelText(p)}
-                    </Text>
-                  </Box>
-                  <Box key={`proposal-box-${i}`} flexGrow={1} flexShrink={1}>
-                    <Text key={`proposal-${i}`}>{p.text}</Text>
-                  </Box>
-                </Box>
-                <Box
-                  key={`choice-${i}`}
-                  flexDirection="row"
-                  alignItems="center"
-                  flexWrap="wrap"
-                  columnGap={1}
-                  marginLeft={labelWidth + 1}
-                >
-                  <Button
-                    key={`agree-${i}`}
-                    label={`${dec[i] === 'agree' ? '●' : '○'} ${t('agree')}`}
-                    variant={dec[i] === 'agree' ? 'primary' : 'secondary'}
-                    onPress={() => choose(i, 'agree')}
-                  />
-                  <Button
-                    key={`disagree-${i}`}
-                    label={`${dec[i] === 'disagree' ? '●' : '○'} ${t('disagree')}`}
-                    variant={dec[i] === 'disagree' ? 'primary' : 'secondary'}
-                    onPress={() => choose(i, 'disagree')}
-                  />
-                  {Input && (
-                    <Box
-                      key={`field-${i}`}
-                      flexGrow={1}
-                      minWidth={20}
-                      width={fieldWidth([`○ ${t('agree')}`, `○ ${t('disagree')}`])}
-                    >
-                      <Input
-                        key={`remark-${i}`}
-                        placeholder={t('remarkField')}
-                        value={rem[i] ?? ''}
-                        // Enter or the button: send only this row; the rest stays.
-                        submitLabel={t('send')}
-                        onInput={(text: string) => void setRemark(i, text)}
-                        onSubmit={(text: string) => void keepAndSend(i, text)}
-                      />
-                    </Box>
-                  )}
-                  {sent[rowKey(p)] !== undefined && !rem[i]?.trim() && (
-                    <Text key={`sent-${i}`} dimColor>
-                      {t('remarkSent')}
-                    </Text>
-                  )}
-                </Box>
-                {showFull(i) && (
-                  <Box key={`full-${i}`} marginLeft={labelWidth + 1}>
-                    <Text key={`full-remark-${i}`} dimColor strikethrough={isStale(p)}>
-                      {stored[i]}
-                    </Text>
-                  </Box>
-                )}
-              </Box>
+              decisionRow(v, p, i)
             ),
           )}
           <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
