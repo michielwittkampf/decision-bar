@@ -5,7 +5,6 @@ import type { Decision, LastHidden, Option, Proposal } from '../types'
 
 const TOOL = 'decisions'
 const TOOL_FULL = 'mcp__decision-bar__decisions'
-const MAX_ROWS = 12
 const COMMAND = 'decisions'
 
 const proposals = atom({ plugin: 'decision-bar', key: 'proposals' } as const, [] as Proposal[])
@@ -433,7 +432,6 @@ export const register: Register = on => {
           },
           proposals: {
             type: 'array',
-            maxItems: MAX_ROWS,
             items: {
               type: 'object',
               properties: {
@@ -550,7 +548,8 @@ export const register: Register = on => {
       const removed = rows.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
       const rest = rows.filter(row => row.p.options || !toRemove.has(row.p.label))
       const decisionRows = rest.filter(row => !row.p.options)
-      const keep = [...decisionRows.slice(-MAX_ROWS), ...rest.filter(row => row.p.options)]
+      // No limit: a decision only leaves the bar when it is sent, hidden or removed.
+      const keep = [...decisionRows, ...rest.filter(row => row.p.options)]
 
       await update($, proposals, () => keep.map(row => row.p))
       await update($, decisions, () => keep.map(row => row.d))

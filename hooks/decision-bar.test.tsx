@@ -690,3 +690,15 @@ test('every message from the bar ends with a line break, so queued answers get a
   await ui.input({ key: 'remark-0', text: '' })
   expect(raw).toEqual(['T1 agree: tea on Tuesday\n', 'T2 disagree: orange penguin\n'])
 })
+
+test('no limit on open decisions: twenty rows stay, none dropped', async ($, on) => {
+  setup(on)
+
+  const many = Array.from({ length: 20 }, (_, i) => ({ label: `D${i + 1}`, text: `proposal ${i + 1}` }))
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: many })
+  expect(String(res.result)).toContain('D1, D2')
+  expect(String(res.result)).toContain('D20.')
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+  expect(await ui.find({ key: 'agree-19' })).toBeDefined()
+})

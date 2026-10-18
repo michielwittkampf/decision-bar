@@ -35,7 +35,7 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 
 ## Why use it
 
-- **Many decisions, one overview.** Up to twelve open decisions at once, each with its own choice
+- **Many decisions, one overview.** As many open decisions as you need, each with its own choice
   and remark, and a heading that counts what is open and what is chosen. New questions join the
   list instead of replacing it.
 - **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave

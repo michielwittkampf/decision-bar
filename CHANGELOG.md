@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- No limit on open decisions: the bar no longer drops the oldest beyond twelve.
 - Answers sent one by one while Claude is working now arrive with a blank line between them.
 - README: screenshots of the bar expanded, collapsed and with many decisions.
 
