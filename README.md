@@ -3,11 +3,11 @@
 A [Claude Code](https://claude.com/claude-code) mod for working through many decisions without
 losing track of them.
 
-When Claude needs your input, the decisions it proposes go into a bar above the input field
-instead of interrupting the conversation. They wait there while you keep working: do some
-research, ask Claude a question in between, look into something else. Answer them when you are
-ready, in the order you choose — agree or disagree, add a remark, send one or all at once. The
-bar always shows what is still open and what you have already decided.
+When Claude needs your input, the decisions it proposes appear as a box in the conversation,
+right where Claude discusses them, and are collected in a bar above the input field. Nothing
+interrupts you: keep working, do some research, ask Claude a question in between. Answer when you
+are ready, in the order you choose — in the box, in context, or in the bar, which always shows
+what is still open and what you have already decided.
 
 ![The decision bar with two decisions, a remark shown in full, and Send all](docs/main.png)
 
@@ -38,6 +38,9 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 - **Many decisions, one overview.** As many open decisions as you need, each with its own choice
   and remark, and a heading that counts what is open and what is chosen. New questions join the
   list instead of replacing it.
+- **Decide in context.** Each set of decisions is a box in the chat, next to Claude's explanation.
+  Scroll back and answer it there later; a box shows what you sent, and `Send all` in a box sends
+  only that box.
 - **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave
   the rest while you dig into them; Claude can keep working in the meantime.
 - **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
@@ -64,6 +67,9 @@ authors:
 - **Controlled text inputs.** Redrawing an `Input` resets its cursor and scroll, so the mod keeps
   typed text out of shared state until your next action. An `Input` that keeps its own cursor
   across redraws would let counts and the full remark update live.
+- **Tool groups that stay open.** The desktop app folds consecutive tool calls into a collapsed
+  group and does not honour a mod's `isExpanded` on it, so a decision box next to another tool call
+  is hidden. Claude is told to keep text between them.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
