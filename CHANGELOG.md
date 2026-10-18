@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-10-18
 
+- Decision boxes in the chat: each call shows its decisions where Claude discusses them, with
+  agree / disagree, remark and send, in sync with the bar. `Send all` in a box sends only that
+  box; sent decisions show their answer and remark.
 - No limit on open decisions: the bar no longer drops the oldest beyond twelve.
 - Answers sent one by one while Claude is working now arrive with a blank line between them.
 - README: screenshots of the bar expanded, collapsed and with many decisions.

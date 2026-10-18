@@ -40,6 +40,7 @@ const NL = {
   restoreLater: '(later terug met /{command})',
   restore: 'Terughalen',
   close: 'Sluiten',
+  closed: 'gesloten',
   nothingToSendAnswer: 'Niets te versturen: typ eerst een antwoord.',
   nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord, of typ een opmerking.',
   messageDecision: '{label} {decision}: {proposal}',
@@ -701,4 +702,89 @@ test('no limit on open decisions: twenty rows stay, none dropped', async ($, on)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
   expect(await ui.find({ key: 'agree-19' })).toBeDefined()
+})
+
+test('the tool call row in the chat shows the decisions, and a press there sets the choice in the bar', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: PROPOSALS },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
+  await row.press({ key: 'chat-call-1-agree-1' })
+  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await bar.find({ key: 'agree-1' }))?.text).toContain('●')
+})
+
+test('the chat box sends only its own decisions, and then shows the sent answers', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[2]!] })
+  const box = {
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: PROPOSALS.slice(0, 2) },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  } as const
+  const row = await $.ui.mount(box)
+  await row.press({ key: 'chat-call-1-agree-0' })
+  await row.press({ key: 'chat-call-1-disagree-1' })
+  await row.input({ key: 'chat-call-1-remark-1', text: 'rather purple', kind: 'change' })
+  await row.press({ key: 'chat-call-1-send-box' })
+  expect(sent.at(-1)).toBe('T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n↳ Remark: rather purple')
+
+  await row.redraw()
+  expect(await row.find({ type: 'Text', text: '✓ agree' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: '↳ rather purple' })).toBeDefined()
+  // T3 came from another call and is still open in the bar.
+  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await bar.find({ key: 'agree-0' })).toBeDefined()
+})
+
+test('a group of tool calls with a decision box stays open; other groups are left alone', async ($, on) => {
+  const seen: boolean[] = []
+  on('ui.render', ($, e) => {
+    if (e.component === 'ToolGroup') {
+      seen.push((e.props as { isExpanded: boolean }).isExpanded)
+    }
+    const { Box } = $.ui.resolve(e)
+    return <Box key="group" />
+  })
+  const group = (tool: string) =>
+    ({
+      plugin: 'decision-bar',
+      surface: 'desktop',
+      component: 'ToolGroup',
+      props: {
+        calls: [
+          { tool: 'Bash', input: {}, isRunning: false },
+          { tool, input: {}, isRunning: false },
+        ],
+        isActive: false,
+        isExpanded: false,
+      } as unknown as RenderPropsOf['ToolGroup'],
+    }) as const
+  await $.ui.mount(group(TOOL))
+  await $.ui.mount(group('Read'))
+  expect(seen).toEqual([true, false])
 })
