@@ -89,8 +89,10 @@ offer. They are recorded here so they are not "fixed" back into a problem.
   stale full remark is struck through meanwhile); `Send all` is always shown when expanded; text
   typed but not yet committed is lost on `/reload-plugins`; a second screen following the session
   sees typing only after the next action.
-- *Leaving the bar is not an event.* Only panes report focus, the band above the prompt does not;
-  clicking elsewhere without typing does not commit.
+- *Focus moves are not reported by the desktop app.* The terminal reports Tab, arrows and clicks
+  inside the bar (`ui.focus`); the desktop app does not, so there only typing in another field, a
+  button press, a message or a call from Claude commits. Leaving the bar is not an event anywhere:
+  only panes report focus, the band above the prompt does not.
 
 **Layout works in whole character cells.**
 - Margins and gaps are whole cells, so spacing comes in steps of one line or one column.
@@ -100,7 +102,8 @@ offer. They are recorded here so they are not "fixed" back into a problem.
   sized to the room left on the line, which takes effect in the terminal; the full-remark line
   makes up for the narrow field on the desktop.
 - The label column is at most 14 cells; a longer label wraps (top-aligned) instead of narrowing
-  the proposal and the field.
+  the proposal and the field. A word longer than the column is broken with a hyphen: soft hyphens
+  outside the terminal (the app breaks only where needed), hard breaks in the terminal.
 - Outside the terminal the content is indented one cell to line up with the chevron, which sits
   inside the heading button's border.
 - Two ordinary spaces are collapsed into one by the desktop app, so separators use an en space

@@ -662,3 +662,14 @@ test('typing in another field commits the previous one: its full text is updated
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: long })).toBeDefined()
 })
+
+test('a label word longer than the column is broken with a hyphen', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'Settingsfilename', text: 'restore it' }] })
+  const term = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await term.find({ type: 'Text', text: 'Settingsfile-\nname' })).toBeDefined()
+  await term.unmount()
+  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await desk.find({ type: 'Text', text: [...'Settingsfilename'].join('\u00AD') })).toBeDefined()
+})

@@ -163,6 +163,27 @@ const lineCount = (text: string, width: number) => {
   return count
 }
 
+// Breaks words longer than `width` cells: soft hyphens (shown only where the line breaks) or,
+// with `soft` false, a hyphen and a line break every `width - 1` characters.
+const breakLongWords = (text: string, width: number, soft: boolean) =>
+  text
+    .split(' ')
+    .map(word => {
+      const chars = [...word]
+      if (chars.length <= width || width < 2) {
+        return word
+      }
+      if (soft) {
+        return chars.join('\u00AD')
+      }
+      const parts: string[] = []
+      for (let i = 0; i < chars.length; i += width - 1) {
+        parts.push(chars.slice(i, i + width - 1).join(''))
+      }
+      return parts.join('-\n')
+    })
+    .join(' ')
+
 // Decided is agree / disagree, or a typed answer to a question; the rest is open. Remarks count
 // only on decisions: on a question the text is the answer itself.
 const tally = (list: Proposal[], dec: Decision[], rem: string[]) => {
@@ -679,7 +700,10 @@ export const register: Register = on => {
     const shownLabel = (p: Proposal) => (p.options ? t('question') : p.label)
     // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
     // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
-    const labelWidth = Math.min(14, Math.max(...list.map(p => shownLabel(p).length)) + 2)
+    const labelWidth = Math.min(14, Math.max(...list.map(p => [...shownLabel(p)].length)) + 2)
+    // A word longer than the column is broken with a hyphen. Outside the terminal soft hyphens let
+    // the app break only where proportional text really needs it; the terminal gets hard breaks.
+    const labelText = (p: Proposal) => breakLongWords(shownLabel(p), labelWidth - 1, roomy)
     // The field as wide as the line allows next to the buttons before it and "send" after it. The
     // desktop app draws an Input at its own width; this only takes effect in the terminal.
     const fieldWidth = (buttons: string[]) =>
@@ -760,7 +784,7 @@ export const register: Register = on => {
                 <Box key={`top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
                   <Box key={`label-box-${i}`} width={labelWidth} flexShrink={0}>
                     <Text key={`label-${i}`} bold>
-                      {shownLabel(p)}
+                      {labelText(p)}
                     </Text>
                   </Box>
                   <Box key={`question-box-${i}`} flexGrow={1} flexShrink={1}>
@@ -810,7 +834,7 @@ export const register: Register = on => {
                 <Box key={`top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
                   <Box key={`label-box-${i}`} width={labelWidth} flexShrink={0}>
                     <Text key={`label-${i}`} bold>
-                      {shownLabel(p)}
+                      {labelText(p)}
                     </Text>
                   </Box>
                   <Box key={`proposal-box-${i}`} flexGrow={1} flexShrink={1}>
