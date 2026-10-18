@@ -19,6 +19,9 @@ const hiddenLabels = atom({ plugin: 'decision-bar', key: 'hiddenLabels' } as con
 // The last hidden set, to restore; `show` is the row with the Restore button.
 const lastHidden = atom({ plugin: 'decision-bar', key: 'lastHidden' } as const, null as LastHidden | null)
 const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, false)
+// Proposals (`rowKey`) whose field is being edited: their full-remark line is struck through,
+// as visibly stale text next to the field.
+const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
 // The decision sent per proposal (`rowKey`), so its box in the chat can show what was answered.
 const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, 'agree' | 'disagree'>)
 // The remark sent with that decision, if any, shown under it in the box.
@@ -121,19 +124,26 @@ const TRAILER = '\n'
 
 const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
 
-// Writes the remark of the proposal with `key` to `$.state` on every keystroke, so the counts, the
-// collapsed summary and the full-remark line follow the typing. The redraw hands the field the
-// text it already holds, and the field keeps its cursor. By key, not by place: a send or a new
-// call may have moved the row since the field was drawn.
-const writeRemark = async ($: EngineInterface, key: string, text: string) => {
-  const list = await read($, proposals)
-  const at = list.findIndex(p => rowKey(p) === key)
-  if (at < 0) {
-    return
+// What is typed in a remark field, per proposal (`rowKey`). Deliberately not in `$.state`: every
+// write there redraws the bar, and a redrawn field is handed its text again (`value`), which made
+// the field flicker on every keystroke and jump back to the start of the text. Committed to
+// `remarks` on any other action (`commitDrafts`); a reload of the mod loses only uncommitted typing.
+let drafts = new Map<string, string>()
+// The field (`key`) last typed in: focus moving there is not another action.
+let lastField: string | undefined
+const currentRemarks = (list: Proposal[], stored: string[]) =>
+  list.map((p, i) => drafts.get(rowKey(p)) ?? stored[i] ?? '')
+const commitDrafts = async ($: EngineInterface) => {
+  lastField = undefined
+  if (drafts.size > 0) {
+    const [list, stored] = await Promise.all([read($, proposals), read($, remarks)])
+    const now = currentRemarks(list, stored)
+    drafts.clear()
+    await update($, remarks, () => now)
   }
-  await update($, remarks, old =>
-    old[at] === text ? old : list.map((_, j) => (j === at ? text : (old[j] ?? ''))),
-  )
+  if ((await read($, editing)).length > 0) {
+    await update($, editing, () => [])
+  }
 }
 
 // Width of a button with its border and the gap next to it, in cells (an estimate).
@@ -246,6 +256,7 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
 // Sets or clears (pressing the chosen state again) the decision of the open row with `label`;
 // used by the boxes in the chat, which know a decision by its label, not its index.
 const chooseByLabel = async ($: EngineInterface, label: string, decision: Exclude<Decision, null>) => {
+  await commitDrafts($)
   const list = await read($, proposals)
   const i = list.findIndex(p => !p.options && p.label === label)
   if (i < 0) {
@@ -260,6 +271,7 @@ const chooseByLabel = async ($: EngineInterface, label: string, decision: Exclud
 
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
+  await commitDrafts($)
   const [list, dec, rem] = await Promise.all([read($, proposals), read($, decisions), read($, remarks)])
   const labels = list.filter(p => !p.options).map(p => p.label)
   await update($, hiddenLabels, old => [...new Set([...old, ...labels])])
@@ -273,6 +285,7 @@ const hide = async ($: EngineInterface) => {
 // Brings back the last hidden set, with choices and remarks as they were. What was added in the
 // meantime stays; a label that is back already is not added twice.
 const restore = async ($: EngineInterface): Promise<number> => {
+  await commitDrafts($)
   const set = await read($, lastHidden)
   if (!set || set.rows.length === 0) {
     return 0
@@ -297,6 +310,7 @@ const restore = async ($: EngineInterface): Promise<number> => {
 }
 
 const clear = async ($: EngineInterface) => {
+  drafts.clear()
   await update($, proposals, () => [])
   await update($, decisions, () => [])
   await update($, remarks, () => [])
@@ -306,6 +320,7 @@ const clear = async ($: EngineInterface) => {
 // Sends the lines for `indexes`. A proposal with a decision disappears; a proposal with only a
 // remark stays open, without that remark.
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
+  await commitDrafts($)
   const list = await read($, proposals)
   const dec = agreeToAll ? list.map((p): Decision => (p.options ? null : 'agree')) : await read($, decisions)
   const rem = await read($, remarks)
@@ -374,6 +389,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
 // An answer button of a question: sends that text (with the remark below it) and removes only
 // that question.
 const pickOption = async ($: EngineInterface, i: number, option: Option) => {
+  await commitDrafts($)
   const rem = await read($, remarks)
   const r = rem[i]?.trim() ?? ''
   const t = await currentTranslator($)
@@ -458,16 +474,33 @@ const rowView = async (
   const { Box, Button, Text, Input } = els
   const t = translator(await read($, texts))
   const dec = await read($, decisions)
-  const rem = await read($, remarks)
+  const stored = await read($, remarks)
+  const rem = currentRemarks(list, stored)
   const sent = await read($, sentRemarks)
-  const showFull = (i: number) => (rem[i]?.trim().length ?? 0) > LONG_REMARK
+  const beingEdited = await read($, editing)
+  // The line shows the last committed text; while the field is edited it is struck through:
+  // visibly stale, until the next action updates it.
+  const showFull = (i: number) => (stored[i]?.trim().length ?? 0) > LONG_REMARK
+  const isStale = (p: Proposal) => beingEdited.includes(rowKey(p))
 
+  // Typing does not redraw (see `drafts`); only clearing "✓ remark sent" or striking through the
+  // full remark does, once.
   const setRemark = async (i: number, text: string) => {
     const p = list[i]
     if (!p) {
       return
     }
-    await writeRemark($, rowKey(p), text)
+    const field = `${prefix}remark-${i}`
+    // Typed in another field first: that is another action, the other field is committed.
+    // Works also where the app does not report focus moves to the mod.
+    if (lastField !== undefined && lastField !== field) {
+      await commitDrafts($)
+    }
+    drafts.set(rowKey(p), text)
+    lastField = field
+    if ((stored[i]?.trim().length ?? 0) > LONG_REMARK && !beingEdited.includes(rowKey(p))) {
+      await update($, editing, old => [...old, rowKey(p)])
+    }
     if (sent[rowKey(p)] !== undefined && sent[rowKey(p)] !== text.trim()) {
       await update($, sentRemarks, old => {
         const { [rowKey(p)]: _gone, ...rest } = old
@@ -488,11 +521,13 @@ const rowView = async (
   }
   // Pressing the chosen state again sets it back to "no decision".
   const choose = (i: number, decision: Exclude<Decision, null>) =>
-    update($, decisions, old => {
-      const choices = list.map((_, j) => old[j] ?? null)
-      choices[i] = choices[i] === decision ? null : decision
-      return choices
-    })
+    commitDrafts($).then(() =>
+      update($, decisions, old => {
+        const choices = list.map((_, j) => old[j] ?? null)
+        choices[i] = choices[i] === decision ? null : decision
+        return choices
+      }),
+    )
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
   const roomy = surface !== 'terminal'
@@ -512,7 +547,7 @@ const rowView = async (
       columns - (roomy ? 1 : 0) - (labelWidth + 1) - [...buttons, t('send')].reduce((sum, b) => sum + buttonWidth(b), 0) - 1,
     )
   return {
-    Box, Button, Text, Input, t, prefix, dec, rem, sent, showFull,
+    Box, Button, Text, Input, t, prefix, dec, stored, rem, sent, showFull, isStale,
     setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth,
   }
 }
@@ -520,7 +555,7 @@ type RowView = Awaited<ReturnType<typeof rowView>>
 
 // One decision row: label, proposal, agree / disagree, remark field and its full text below.
 const decisionRow = (v: RowView, p: Proposal, i: number) => {
-  const { Box, Button, Text, Input, t, prefix: k, dec, rem, sent, showFull } = v
+  const { Box, Button, Text, Input, t, prefix: k, dec, rem, sent, stored, showFull, isStale } = v
   return (
     // Outside the terminal some air around the buttons, and clearly more between rows.
     <Box key={`${k}row-${i}`} flexDirection="column" rowGap={v.roomy ? 1 : 0} marginTop={v.roomy && i > 0 ? 1 : 0}>
@@ -575,8 +610,8 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
       </Box>
       {showFull(i) && (
         <Box key={`${k}full-${i}`} marginLeft={v.labelWidth + 1}>
-          <Text key={`${k}full-remark-${i}`} dimColor>
-            {rem[i]}
+          <Text key={`${k}full-remark-${i}`} dimColor strikethrough={isStale(p)}>
+            {stored[i]}
           </Text>
         </Box>
       )}
@@ -585,6 +620,9 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
 }
 
 export const register: Register = on => {
+  drafts = new Map()
+  lastField = undefined
+
   on('session.start', async ($, e, next) => {
     await $.tool.register({
       name: TOOL,
@@ -652,6 +690,7 @@ export const register: Register = on => {
       // The previous mirrored question makes way for the new one; decisions stay.
       const question = questionFromWrapUp(e)
       if (question) {
+        await commitDrafts($).catch(() => undefined)
         await Promise.all([read($, proposals), read($, decisions), read($, remarks)])
           .then(async ([list, dec, rem]) => {
             const keep = list.map((_, i) => i).filter(i => !list[i]!.options)
@@ -686,6 +725,7 @@ export const register: Register = on => {
     )
 
     try {
+      await commitDrafts($)
       const languageSentence = await setLanguage($, languageCode(languageInput), translationInput)
       const [list, dec, rem, hidden] = await Promise.all([
         read($, proposals),
@@ -746,11 +786,28 @@ export const register: Register = on => {
     }
   })
 
+  // To another field or a button (Tab, arrows, click): what was typed is committed.
+  on('ui.focus', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const result = await next(e)
+    if (e.element !== lastField) {
+      await commitDrafts($).catch(() => undefined)
+    }
+    return result
+  })
+  // Typing in Claude Code's own input field is another action too.
+  on('prompt.edit', async ($, e, next) => {
+    if (lastField !== undefined) {
+      await commitDrafts($).catch(() => undefined)
+    }
+    return next(e)
+  })
+
   // Answered in the app's own box: the message is exactly the text of one of the answer buttons.
   // Then the mirrored question no longer belongs in the bar.
   on('prompt.submit', async ($, e, next) => {
     // The "hidden — Restore" row belongs to the moment of hiding; /decisions keeps working.
     await update($, lastHidden, set => (set && set.show ? { ...set, show: false } : set)).catch(() => undefined)
+    await commitDrafts($).catch(() => undefined)
     const text = e.text.trim()
     await read($, proposals)
       .then(async list => {
@@ -897,7 +954,7 @@ export const register: Register = on => {
     }
 
     const v = await rowView($, table as Elements, e.surface, list, '', e.props.bodyColumns)
-    const { Input, dec, rem, showFull, setRemark, keepAndSend, roomy, labelWidth, labelText, fieldWidth } = v
+    const { Input, dec, stored, rem, showFull, isStale, setRemark, keepAndSend, roomy, labelWidth, labelText, fieldWidth } = v
     const hasDecisions = list.some(p => !p.options)
     const all = list.map((_, i) => i)
     // With one row no "all": you would look for what else goes along.
@@ -923,9 +980,9 @@ export const register: Register = on => {
       (e.props.bodyColumns - buttonWidth(`${CLOSED} ${t('heading')}`) - (hasSomething ? buttonWidth(sendLabel) : 0)) *
       (roomy ? 1.3 : 1)
     const collapsedLines = (text: string) => (e.props.bodyColumns > 0 ? lineCount(text, room) : 1)
-    const toggle = () => update($, collapsed, c => !c)
-    // Expanded, "Send all" is always there, so the buttons below the rows do not move as the first
-    // choice or remark comes in; with nothing to send, a toast says so.
+    const toggle = () => commitDrafts($).then(() => update($, collapsed, c => !c))
+    // Expanded, "Send all" is always there: typing a remark alone does not redraw the bar, so the
+    // button would otherwise appear only after another action.
     const sendAll = async () => {
       if (!(await send($, all))) {
         $.ui.toast(t('nothingToSendDecision'))
@@ -1005,8 +1062,8 @@ export const register: Register = on => {
                 </Box>
                 {showFull(i) && (
                   <Box key={`full-${i}`} marginLeft={labelWidth + 1}>
-                    <Text key={`full-remark-${i}`} dimColor>
-                      {rem[i]}
+                    <Text key={`full-remark-${i}`} dimColor strikethrough={isStale(p)}>
+                      {stored[i]}
                     </Text>
                   </Box>
                 )}
