@@ -247,6 +247,22 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
   return r ? `${core}\n${INDENT}${t('messageRemark', { remark: r })}` : core
 }
 
+// Sets or clears (pressing the chosen state again) the decision of the open row with `label`;
+// used by the boxes in the chat, which know a decision by its label, not its index.
+const chooseByLabel = async ($: EngineInterface, label: string, decision: Exclude<Decision, null>) => {
+  await commitDrafts($)
+  const list = await read($, proposals)
+  const i = list.findIndex(p => !p.options && p.label === label)
+  if (i < 0) {
+    return
+  }
+  await update($, decisions, old => {
+    const choices = list.map((_, j) => old[j] ?? null)
+    choices[i] = choices[i] === decision ? null : decision
+    return choices
+  })
+}
+
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
   await commitDrafts($)
@@ -611,6 +627,64 @@ export const register: Register = on => {
       .catch(() => undefined)
 
     return next(e)
+  })
+
+  // In the chat: the tool call's own row shows the decisions it proposed, with the same agree /
+  // disagree as the bar. A decision that is no longer open shows as answered.
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (!(e.props.tool === TOOL_FULL || e.props.tool.endsWith(`decision-bar__${TOOL}`))) {
+      return next(e)
+    }
+    const input = e.props.input as { proposals?: unknown }
+    const asked = (Array.isArray(input?.proposals) ? input.proposals : []).filter(
+      (p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string',
+    )
+    if (asked.length === 0) {
+      return next(e)
+    }
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const t = translator(await read($, texts))
+    const [list, dec] = await Promise.all([read($, proposals), read($, decisions)])
+    const callId = e.props.tool_use_id
+    return (
+      <Box flexDirection="column" rowGap={1} borderStyle="round" paddingX={1}>
+        {asked.map((p, k) => {
+          const i = list.findIndex(o => !o.options && o.label === p.label.trim())
+          const open = i >= 0 && list[i]!.text === p.text.trim()
+          const d = open ? (dec[i] ?? null) : null
+          return (
+            <Box key={`chat-${callId}-${k}`} flexDirection="column">
+              <Text key={`chat-text-${callId}-${k}`}>
+                <Text key={`chat-label-${callId}-${k}`} bold>
+                  {p.label}
+                </Text>{' '}
+                {p.text}
+              </Text>
+              {open ? (
+                <Box key={`chat-choice-${callId}-${k}`} flexDirection="row" columnGap={1}>
+                  <Button
+                    key={`chat-agree-${callId}-${k}`}
+                    label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
+                    variant={d === 'agree' ? 'primary' : 'secondary'}
+                    onPress={() => chooseByLabel($, p.label.trim(), 'agree')}
+                  />
+                  <Button
+                    key={`chat-disagree-${callId}-${k}`}
+                    label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
+                    variant={d === 'disagree' ? 'primary' : 'secondary'}
+                    onPress={() => chooseByLabel($, p.label.trim(), 'disagree')}
+                  />
+                </Box>
+              ) : (
+                <Text key={`chat-done-${callId}-${k}`} dimColor>
+                  ✓
+                </Text>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

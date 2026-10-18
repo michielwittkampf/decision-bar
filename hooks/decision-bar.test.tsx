@@ -702,3 +702,26 @@ test('no limit on open decisions: twenty rows stay, none dropped', async ($, on)
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
   expect(await ui.find({ key: 'agree-19' })).toBeDefined()
 })
+
+test('the tool call row in the chat shows the decisions, and a press there sets the choice in the bar', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: PROPOSALS },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
+  await row.press({ key: 'chat-agree-call-1-1' })
+  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await bar.find({ key: 'agree-1' }))?.text).toContain('●')
+})
