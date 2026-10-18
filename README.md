@@ -55,14 +55,15 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 Things the mod works around today, as feedback for the Claude Code team and for other mod
 authors:
 
+- **A text input that grows with its text.** The desktop app draws an `Input` at a fixed width on
+  one line. One that widens to the room on the line and then wraps onto more lines as you type
+  would show the whole remark while you write it, without a separate full-remark line below.
 - **Focus events in the desktop app.** The terminal reports focus moving inside the bar; the
   desktop app does not, and neither surface reports focus leaving the band above the prompt.
   With those, typed remarks could be committed the moment you move on.
 - **Controlled text inputs.** Redrawing an `Input` resets its cursor and scroll, so the mod keeps
   typed text out of shared state until your next action. An `Input` that keeps its own cursor
   across redraws would let counts and the full remark update live.
-- **Input width.** The desktop app draws an `Input` at a fixed width; a width prop would let the
-  remark field use the room on the line.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
