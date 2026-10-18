@@ -6,7 +6,7 @@ all of them at once — without typing out your answers. The bar speaks the lang
 
 Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
 
-![The decision bar with three decisions: one agreed, one with a remark, one disagreed](docs/expanded.png)
+![The decision bar with two decisions, a remark shown in full, and Send all](docs/main.png)
 
 ## Install
 
@@ -48,8 +48,10 @@ In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add 
   bar: Claude only signals the language when the bar would otherwise show the wrong one.
 - **Long remarks** are shown in full below the field; while you edit, the old version is struck
   through until it is updated.
+- **Many decisions, one overview.** Up to twelve decisions at once, each in the same columns, with
+  the heading counting what is open and what is chosen.
 
-  ![A remark shown in full below its field](docs/remark.png)
+  ![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
 
 
 ## What would make it better
