@@ -76,21 +76,18 @@ authors:
 | `types/index.d.ts` | type contract of the state |
 | `.claude-plugin/` | manifest and marketplace file |
 
-1. Load the `plugin-authoring` skill in Claude Code for the API of your version.
-2. Change `hooks/register.tsx` and the tests.
-3. Check with `claude plugin validate .` and `claude plugin test .`; type-check with `tsc -p .`
-   once the engine has written `.claude-plugin/types/`.
-4. In a running session: `/reload-plugins`.
+1. Run your checkout with `claude --plugin-dir .`, or install it from the folder:
+   `claude plugin marketplace add .` and `claude plugin install decision-bar@decision-bar`.
+2. Change the code and tests; check with `claude plugin validate .` and `claude plugin test .`.
+3. In a running session, `/reload-plugins` picks up the change.
 
-Notes for working on it:
+The `plugin-authoring` skill in Claude Code has the mod API for your version. Things to know:
 
 - Typed text lives in `drafts`, not in `$.state`, and is committed by `commitDrafts` on any other
   action; reading goes through `currentRemarks`. Keep it that way, or typing flickers.
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
-- Margins take numbers only (`marginTop={1}`).
 - The test kit has no `$.store`; `setup` in the tests provides one.
-- Find a `Text` by its text in tests, not by `key`.
 
 ## License
 
