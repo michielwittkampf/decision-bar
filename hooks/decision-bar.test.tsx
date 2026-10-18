@@ -457,13 +457,10 @@ test('a long remark is shown in full below the field', async ($, on) => {
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const long = 'this is a fairly long remark that does not fit in one narrow field and belongs below it'
-  // The line shows the committed text: after another action, here a choice.
   await ui.input({ key: 'remark-0', text: long, kind: 'change' })
-  await ui.press({ key: 'agree-1' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: long })).toBeDefined()
   await ui.input({ key: 'remark-0', text: 'short', kind: 'change' })
-  await ui.press({ key: 'agree-1' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: long })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'short' })).toBeUndefined()
@@ -650,30 +647,30 @@ test('typed text stays when the bar redraws for another reason', async ($, on) =
   expect(sent.at(-1)).toContain('T2 (no decision yet)\n↳ Remark: half typed')
 })
 
-test('the full text is struck through while typing and comes back updated on another action', async ($, on) => {
+test('the full text follows the typing, on terminal and desktop', async ($, on) => {
   setup(on)
 
-  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  const first = 'a first long remark that does not fit in the narrow field'
-  await ui.input({ key: 'remark-0', text: first, kind: 'change' })
-  await ui.press({ key: 'agree-1' })
-  await ui.redraw()
-  expect(await ui.find({ type: 'Text', text: first })).toBeDefined()
+  for (const surface of ['terminal', 'desktop'] as const) {
+    await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const first = 'a first long remark that does not fit in the narrow field'
+    await ui.input({ key: 'remark-0', text: first, kind: 'change' })
+    await ui.redraw()
+    expect(await ui.find({ type: 'Text', text: first })).toBeDefined()
 
-  const later = `${first}, with a bit more`
-  await ui.input({ key: 'remark-0', text: later, kind: 'change' })
-  await ui.redraw()
-  // While typing: the old text struck through, the new one not yet.
-  expect(await ui.find({ type: 'Text', text: first })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: later })).toBeUndefined()
-
-  await ui.press({ key: 'agree-2' })
-  await ui.redraw()
-  expect(await ui.find({ type: 'Text', text: later })).toBeDefined()
+    // No other action needed: the line shows the new text as it is typed.
+    const later = `${first}, with a bit more`
+    await ui.input({ key: 'remark-0', text: later, kind: 'change' })
+    await ui.redraw()
+    expect(await ui.find({ type: 'Text', text: new RegExp(`^${first}$`) })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: later })).toBeDefined()
+    expect((await ui.find({ key: 'remark-0' }))?.text).toContain(later)
+    await $.tool.call({ tool: TOOL, ...EN, remove: ['T1', 'T2', 'T3'] })
+    await ui.unmount()
+  }
 })
 
-test('typing in another field commits the previous one: its full text is updated', async ($, on) => {
+test('typing in another field leaves the previous one as typed', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
@@ -683,6 +680,43 @@ test('typing in another field commits the previous one: its full text is updated
   await ui.input({ key: 'remark-1', text: 'k', kind: 'change' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: long })).toBeDefined()
+  expect((await ui.find({ key: 'remark-0' }))?.text).toContain(long)
+  expect((await ui.find({ key: 'remark-1' }))?.text).toContain('k')
+})
+
+test('counts follow the typing: a typed answer is chosen, a remark counts in the collapsed bar', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  await $.tool.call(WRAP_UP)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 25 } })
+  expect(await ui.find({ type: 'Text', text: '2 open' })).toBeDefined()
+
+  // Only typing, no other action: the heading counts the typed answer to the question at once.
+  await ui.input({ key: 'remark-1', text: 'run the tests first', kind: 'change' })
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: `1 open${S}1 chosen` })).toBeDefined()
+
+  await ui.input({ key: 'remark-0', text: 'why tea?', kind: 'change' })
+  await ui.press({ key: 'toggle' })
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: `1 open and 1 decided${S}1 ✎` })).toBeDefined()
+})
+
+test('a remark typed in a chat box shows in the bar as it is typed, and the other way round', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const row = await $.ui.mount(chatRow(PROPOSALS))
+  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await row.input({ key: 'chat-call-1-remark-1', text: 'rather purple', kind: 'change' })
+  await bar.redraw()
+  expect((await bar.find({ key: 'remark-1' }))?.text).toContain('rather purple')
+
+  await bar.input({ key: 'remark-2', text: 'why four?', kind: 'change' })
+  await row.redraw()
+  expect((await row.find({ key: 'chat-call-1-remark-2' }))?.text).toContain('why four?')
+  expect(await row.find({ type: 'Text', text: `3 open` })).toBeDefined()
 })
 
 test('a label word longer than the column is broken with a hyphen', async ($, on) => {

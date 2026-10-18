@@ -57,18 +57,15 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 
 ## What would make it better
 
-Things the mod works around today, as feedback for the Claude Code team and for other mod
-authors:
+Things the mod works around today or ran into while it was built, as feedback for the Claude
+Code team and for other mod authors:
 
 - **A text input that grows with its text.** The desktop app draws an `Input` at a fixed width on
   one line. One that widens to the room on the line and then wraps onto more lines as you type
   would show the whole remark while you write it, without a separate full-remark line below.
-- **Focus events in the desktop app.** The terminal reports focus moving inside the bar; the
-  desktop app does not, and neither surface reports focus leaving the band above the prompt.
-  With those, typed remarks could be committed the moment you move on.
-- **Controlled text inputs.** Redrawing an `Input` resets its cursor and scroll, so the mod keeps
-  typed text out of shared state until your next action. An `Input` that keeps its own cursor
-  across redraws would let counts and the full remark update live.
+- **A focus event for a click into a field.** The desktop app raises `ui.focus` when Tab moves
+  through the band above the prompt and when focus leaves it, but not when you click into an
+  `Input`. A mod that acts when a field gains focus misses the most common way there.
 - **Tool groups that stay open.** The desktop app folds consecutive tool calls into a collapsed
   group and does not honour a mod's `isExpanded` on it, so a decision box next to another tool call
   is hidden. Claude is told to keep text between them.
@@ -93,8 +90,9 @@ authors:
 
 The `plugin-authoring` skill in Claude Code has the mod API for your version. Things to know:
 
-- Typed text lives in `drafts`, not in `$.state`, and is committed by `commitDrafts` on any other
-  action; reading goes through `currentRemarks`. Keep it that way, or typing flickers.
+- Remarks go to `$.state` on every keystroke (`writeRemark`, by the row's key, not its place), and
+  each field is drawn with the remark from state as its `value`. The redraw hands the field the
+  text it already holds, and the terminal and the desktop app both keep the cursor then.
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
 - The test kit has no `$.store`; `setup` in the tests provides one.

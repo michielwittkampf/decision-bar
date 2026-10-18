@@ -16,7 +16,6 @@ declare module 'claude-code' {
       hiddenLabels: string[]
       lastHidden: LastHidden | null
       collapsed: boolean
-      editing: string[]
       answered: Record<string, 'agree' | 'disagree'>
       answeredRemarks: Record<string, string>
       language: string

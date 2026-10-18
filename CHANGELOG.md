@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.3 — 2026-10-18
+
+- Remarks update live: the counts, the collapsed summary and the full remark below the field
+  follow your typing, and a remark typed in a chat box shows in the bar as you type, and the
+  other way round. The full remark is no longer struck through while you type.
+- Typed text is kept in the session's state on every keystroke instead of until your next
+  action, so a reload of the mod no longer loses a remark you were still typing.
+- README: a redraw keeps an `Input`'s cursor, so "Controlled text inputs" is gone from "What would
+  make it better"; the focus item now says exactly what the desktop app reports.
+
 ## 1.2.2 — 2026-10-18
 
 - Fix: a call that both proposes and removes the same label kept the new proposal out of the
