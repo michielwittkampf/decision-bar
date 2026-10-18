@@ -110,8 +110,9 @@ const LONG_REMARK = 22
 // Two normal spaces would be collapsed into one by the desktop app.
 const SEPARATOR = '  ·  '
 
-// Before a remark under an answer: two no-break spaces, since the chat drops ordinary leading spaces.
-const INDENT = '\u00A0\u00A0'
+// Before a remark under an answer: an arrow that ties it to the answer above. The chat shows
+// messages as plain text, so indenting or italics are not available.
+const INDENT = '↳ '
 
 const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
 

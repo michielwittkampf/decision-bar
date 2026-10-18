@@ -120,7 +120,7 @@ test('"Send all" sends decisions and remarks; undecided rows stay', async ($, on
   await ui.press({ key: 'send-all' })
 
   expect(sent).toEqual([
-    'T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n\u00A0\u00A0Remark: rather purple\n\nT3 (no decision yet), remark: why four?',
+    'T1 agree: tea on Tuesday\n\nT2 disagree: orange penguin\n↳ Remark: rather purple\n\nT3 (no decision yet), remark: why four?',
   ])
 
   await ui.redraw()
@@ -138,14 +138,14 @@ test('sending one row: only that row goes, the rest keeps its choice and remark'
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'disagree-1' })
   await ui.input({ key: 'remark-1', text: 'too bright' })
-  expect(sent).toEqual(['T2 disagree: orange penguin\n\u00A0\u00A0Remark: too bright'])
+  expect(sent).toEqual(['T2 disagree: orange penguin\n↳ Remark: too bright'])
 
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /^T2$/ })).toBeUndefined()
   expect((await ui.find({ key: 'agree-1' }))?.text).toContain('●')
 
   await ui.press({ key: 'send-all' })
-  expect(sent.at(-1)).toBe('T3 agree: four legs\n\u00A0\u00A0Remark: with felt pads')
+  expect(sent.at(-1)).toBe('T3 agree: four legs\n↳ Remark: with felt pads')
 })
 
 test('a remark without a decision on one row: the row stays open', async ($, on) => {
@@ -179,7 +179,7 @@ test('"Agree to all" agrees to everything, with the remarks', async ($, on) => {
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'agree-all' })
   expect(sent).toEqual([
-    'T1 agree: tea on Tuesday\n\nT2 agree: orange penguin\n\nT3 agree: four legs\n\u00A0\u00A0Remark: with felt pads',
+    'T1 agree: tea on Tuesday\n\nT2 agree: orange penguin\n\nT3 agree: four legs\n↳ Remark: with felt pads',
   ])
   await ui.redraw()
   expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
@@ -363,7 +363,7 @@ test('a decision after an earlier remark is sent normally', async ($, on) => {
   await ui.input({ key: 'remark-0', text: 'hmm' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-0', text: 'hmm' })
-  expect(sent).toEqual(['T1 (no decision yet), remark: hmm', 'T1 agree: tea on Tuesday\n\u00A0\u00A0Remark: hmm'])
+  expect(sent).toEqual(['T1 (no decision yet), remark: hmm', 'T1 agree: tea on Tuesday\n↳ Remark: hmm'])
 })
 
 test("answered in the app's own box: the question also leaves the bar", async ($, on) => {
@@ -579,7 +579,7 @@ test('a translation once supplied is kept, also after switching language', async
   // The messages that go back are in the bar's language too.
   await ui.press({ key: 'disagree-1' })
   await ui.input({ key: 'remark-1', text: 'liever paars' })
-  expect(sent.at(-1)).toBe('T2 niet akkoord: orange penguin\n\u00A0\u00A0Opmerking: liever paars')
+  expect(sent.at(-1)).toBe('T2 niet akkoord: orange penguin\n↳ Opmerking: liever paars')
 })
 
 test('a call with only a language switches it and leaves rows, choices and remarks', async ($, on) => {
