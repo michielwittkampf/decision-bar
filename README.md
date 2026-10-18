@@ -87,4 +87,4 @@ Notes for working on it:
 
 ## License
 
-MIT — provided as is. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
