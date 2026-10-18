@@ -48,7 +48,7 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 
 - **In your language.** Buttons, counts and answers follow the language of the chat.
 
-![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
+  ![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
 
 ## What would make it better
 
