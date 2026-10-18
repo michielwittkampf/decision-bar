@@ -1,10 +1,13 @@
 # decision-bar
 
-A [Claude Code](https://claude.com/claude-code) mod that turns the decisions Claude proposes into
-a bar above the input field. Agree or disagree per decision, add a remark, and send one row or
-all of them at once — without typing out your answers. The bar speaks the language of your chat.
+A [Claude Code](https://claude.com/claude-code) mod for working through many decisions without
+losing track of them.
 
-Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
+When Claude needs your input, the decisions it proposes go into a bar above the input field
+instead of interrupting the conversation. They wait there while you keep working: do some
+research, ask Claude a question in between, look into something else. Answer them when you are
+ready, in the order you choose — agree or disagree, add a remark, send one or all at once. The
+bar always shows what is still open and what you have already decided.
 
 ![The decision bar with two decisions, a remark shown in full, and Send all](docs/main.png)
 
@@ -22,37 +25,30 @@ From a shell:
 claude plugin install decision-bar --marketplace michielwittkampf/decision-bar
 ```
 
-In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with
-`michielwittkampf/decision-bar`, then **Add plugin**.
+In the desktop app:
 
-## What it does
+```
+Click + next to the prompt box, then Plugins → Add marketplace → michielwittkampf/decision-bar → Add plugin
+```
 
-- **One row per decision.** Whenever Claude asks you to decide something, each decision appears
-  with its label and proposal, `○ agree` / `○ disagree`, a remark field and `send`.
-- **Send one or all.** `Send all` and `Agree to all` at the bottom (`Send` and `Agree` for a
-  single row). Answers reach the chat as `T1 agree: <proposal>` (or `T1 (no decision yet)`),
-  any remark on its own line below as `↳ Remark: …`, and a blank line between answers.
-- **It stays out of your way.** Rows stay while you chat and while Claude works; Claude updates
-  them by label and removes the ones you answered in the chat. `Hide` clears the bar and
-  remembers what you hid; `Restore` or `/decisions` brings it back.
-- **The end question too.** The question and buttons of the desktop app's next-step box are
-  mirrored as a row, with a field for an answer of your own.
-- **Compact when collapsed.** Collapsed, one line shows every decision's state (`T1 ✓ · T2 ✗ ·
-  T3 ○ ✎`), shrinking to `1 open and 2 decided · 2 ✎` when space runs out.
+Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
+
+## Why use it
+
+- **Many decisions, one overview.** Up to twelve open decisions at once, each with its own choice
+  and remark, and a heading that counts what is open and what is chosen. New questions join the
+  list instead of replacing it.
+- **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave
+  the rest while you dig into them; Claude can keep working in the meantime.
+- **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
+  every decision, and the conversation gets the space back. Answered something in the chat
+  instead? Claude takes it off the list.
 
   ![Collapsed, the bar shrinks to one line and leaves the space above it free for the conversation](docs/collapsed.png)
 
-- **Any language.** The bar's buttons, counts and messages follow the chat language. English is
-  built in; for any other language Claude supplies the texts once, the mod checks them and keeps
-  them, and from then on switching is instant. It costs nothing in sessions that do not use the
-  bar: Claude only signals the language when the bar would otherwise show the wrong one.
-- **Long remarks** are shown in full below the field; while you edit, the old version is struck
-  through until it is updated.
-- **Many decisions, one overview.** Up to twelve decisions at once, each in the same columns, with
-  the heading counting what is open and what is chosen.
+- **In your language.** Buttons, counts and answers follow the language of the chat.
 
-  ![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
-
+![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
 
 ## What would make it better
 
