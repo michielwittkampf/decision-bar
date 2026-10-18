@@ -57,14 +57,18 @@ const PROPOSALS = [
 ]
 
 // What sits below the plugin: an empty band, and a prompt.submit that catches what is sent.
+let raw: string[] = []
 const setup = (on: On) => {
   const sent: string[] = []
+  raw = []
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box key="empty" />
   })
   on('prompt.submit', (_$, e) => {
-    sent.push(e.text)
+    // Every message from the bar ends with one line break (see TRAILER); compared without it.
+    sent.push(e.text.endsWith('\n') ? e.text.slice(0, -1) : e.text)
+    raw.push(e.text)
     return { text: e.text }
   })
   // Storage across sessions ($.store), which the test kit does not have itself.
@@ -672,4 +676,17 @@ test('a label word longer than the column is broken with a hyphen', async ($, on
   await term.unmount()
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await desk.find({ type: 'Text', text: [...'Settingsfilename'].join('\u00AD') })).toBeDefined()
+})
+
+test('every message from the bar ends with a line break, so queued answers get a blank line between them', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'agree-0' })
+  await ui.input({ key: 'remark-0', text: '' })
+  // The sent row left the bar, so T2 is now the first row.
+  await ui.press({ key: 'disagree-0' })
+  await ui.input({ key: 'remark-0', text: '' })
+  expect(raw).toEqual(['T1 agree: tea on Tuesday\n', 'T2 disagree: orange penguin\n'])
 })

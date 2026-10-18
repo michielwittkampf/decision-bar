@@ -114,6 +114,10 @@ const SEPARATOR = '  ·  '
 // messages as plain text, so indenting or italics are not available.
 const INDENT = '↳ '
 
+// Ends every message from the bar. Claude Code joins messages queued during a turn with a single
+// line break; this trailing one turns that into a blank line between separately sent answers.
+const TRAILER = '\n'
+
 const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
 
 // What is typed in a remark field, per proposal (`rowKey`). Deliberately not in `$.state`: every
@@ -334,7 +338,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     return remembered
   })
   // A blank line between answers, so each stands on its own in the chat.
-  await $.prompt.submit({ text: lines.join('\n\n'), asUser: true })
+  await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
 }
 
@@ -348,7 +352,10 @@ const pickOption = async ($: EngineInterface, i: number, option: Option) => {
   await update($, proposals, old => old.filter((_, j) => j !== i))
   await update($, decisions, old => old.filter((_, j) => j !== i))
   await update($, remarks, old => old.filter((_, j) => j !== i))
-  await $.prompt.submit({ text: r ? `${option.text}\n${INDENT}${t('messageRemark', { remark: r })}` : option.text, asUser: true })
+  await $.prompt.submit({
+    text: (r ? `${option.text}\n${INDENT}${t('messageRemark', { remark: r })}` : option.text) + TRAILER,
+    asUser: true,
+  })
 }
 
 // The question and answer buttons from the desktop app's next-step box (wrap_up). Buttons that
