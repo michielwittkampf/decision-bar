@@ -6,6 +6,8 @@ all of them at once — without typing out your answers. The bar speaks the lang
 
 Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
 
+![The decision bar with three decisions: one agreed, one with a remark, one disagreed](docs/expanded.png)
+
 ## Install
 
 At the prompt of a terminal session:
@@ -37,12 +39,18 @@ In the desktop app: click **+** next to the prompt box, then **Plugins**, **Add 
   mirrored as a row, with a field for an answer of your own.
 - **Compact when collapsed.** Collapsed, one line shows every decision's state (`T1 ✓ · T2 ✗ ·
   T3 ○ ✎`), shrinking to `1 open and 2 decided · 2 ✎` when space runs out.
+
+  ![The collapsed bar: one line with the state of each decision and Send all](docs/collapsed.png)
+
 - **Any language.** The bar's buttons, counts and messages follow the chat language. English is
   built in; for any other language Claude supplies the texts once, the mod checks them and keeps
   them, and from then on switching is instant. It costs nothing in sessions that do not use the
   bar: Claude only signals the language when the bar would otherwise show the wrong one.
 - **Long remarks** are shown in full below the field; while you edit, the old version is struck
   through until it is updated.
+
+  ![A remark shown in full below its field](docs/remark.png)
+
 
 ## What would make it better
 
