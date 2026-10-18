@@ -755,6 +755,7 @@ test('the chat box sends only its own decisions, and then shows the sent answers
   await row.redraw()
   expect(await row.find({ type: 'Text', text: '✓ agree' })).toBeDefined()
   expect(await row.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: '↳ rather purple' })).toBeDefined()
   // T3 came from another call and is still open in the bar.
   const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await bar.find({ key: 'agree-0' })).toBeDefined()

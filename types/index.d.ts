@@ -18,6 +18,7 @@ declare module 'claude-code' {
       collapsed: boolean
       editing: string[]
       answered: Record<string, 'agree' | 'disagree'>
+      answeredRemarks: Record<string, string>
       language: string
       texts: Record<string, string>
     }

@@ -24,6 +24,8 @@ const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, fa
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
 // The decision sent per proposal (`rowKey`), so its box in the chat can show what was answered.
 const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, 'agree' | 'disagree'>)
+// The remark sent with that decision, if any, shown under it in the box.
+const sentAnswerRemarks = atom({ plugin: 'decision-bar', key: 'answeredRemarks' } as const, {} as Record<string, string>)
 
 // The bar's own texts. Only English is built in; any other chat language gets them once from
 // Claude (`translation` in the tool) and the mod keeps them per language in `$.store`.
@@ -364,6 +366,17 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
       const d = dec[i] ?? null
       if (p && !p.options && d !== null) {
         recorded[rowKey(p)] = d
+      }
+    }
+    return recorded
+  })
+  await update($, sentAnswerRemarks, old => {
+    const recorded: Record<string, string> = { ...(old as Record<string, string>) }
+    for (const i of indexes) {
+      const p = list[i]
+      const r = rem[i]?.trim() ?? ''
+      if (p && !p.options && (dec[i] ?? null) !== null && r !== '') {
+        recorded[rowKey(p)] = r
       }
     }
     return recorded
@@ -840,6 +853,7 @@ export const register: Register = on => {
     const v = await rowView($, els, e.surface, list, prefix, 0)
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
+    const doneRemarks = await read($, sentAnswerRemarks)
     const indexOf = (p: Proposal) => list.findIndex(o => !o.options && rowKey(o) === rowKey(p))
     const openIndexes = asked.map(indexOf).filter(i => i >= 0)
     const openList = openIndexes.map(i => list[i]!)
@@ -880,6 +894,11 @@ export const register: Register = on => {
                 <Text key={`${prefix}closed-answer-${k}`} dimColor>
                   {answer === 'agree' ? `✓ ${t('agree')}` : answer === 'disagree' ? `✗ ${t('disagree')}` : t('closed')}
                 </Text>
+                {answer && doneRemarks[rowKey(p)] && (
+                  <Text key={`${prefix}closed-remark-${k}`} dimColor>
+                    {`${INDENT}${doneRemarks[rowKey(p)]}`}
+                  </Text>
+                )}
               </Box>
             </Box>
           )
