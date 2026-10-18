@@ -57,26 +57,34 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 
 ## What would make it better
 
-Things the mod works around today, as feedback for the Claude Code team and for other mod
-authors:
+Things the mod works around today, as feedback for the Claude Code team and for other mod authors,
+each with its issue on anthropics/claude-code where one is filed. The decision bar itself is
+proposed as a built-in feature in
+[#103281](https://github.com/anthropics/claude-code/issues/103281).
 
-- **A text input that grows with its text.** The desktop app draws an `Input` at a fixed width on
-  one line. One that widens to the room on the line and then wraps onto more lines as you type
-  would show the whole remark while you write it, without a separate full-remark line below.
-- **A focus event for a click into a field.** The desktop app raises `ui.focus` when Tab moves
-  through the band above the prompt and when focus leaves it, but not when you click into an
-  `Input`. The mod commits a typed remark as soon as focus moves on; after a click into another
-  field it has to wait until you type there.
-- **Text inputs that keep their scroll.** A redraw keeps an `Input`'s cursor where it was, but the
-  desktop app scrolls the field back to the start of its text, so once a remark is wider than the
-  field you no longer see where you type. The mod therefore keeps typed text out of shared state
-  until your next action. A field that keeps its scroll across redraws would let the counts and
-  the full remark update live.
-- **Tool groups that stay open.** The desktop app folds consecutive tool calls into a collapsed
-  group and does not honour a mod's `isExpanded` on it, so a decision box next to another tool call
-  is hidden. Claude is told to keep text between them.
-- **Visible refusals.** When the engine refuses a mod's drawing, an installed mod falls back to the
-  app's own row without a word; the reason is only in the debug log.
+- **A text input that grows with its text**
+  ([#103305](https://github.com/anthropics/claude-code/issues/103305)). The desktop app draws an
+  `Input` at a fixed width on one line. One that widens to the room on the line and then wraps onto
+  more lines as you type would show the whole remark while you write it, without a separate
+  full-remark line below.
+- **A focus event for a click into a field**
+  ([#103306](https://github.com/anthropics/claude-code/issues/103306)). The desktop app raises
+  `ui.focus` when Tab moves through the band above the prompt and when focus leaves it, but not when
+  you click into an `Input`. The mod commits a typed remark as soon as focus moves on; after a click
+  into another field it has to wait until you type there.
+- **Text inputs that keep their scroll**
+  ([#103302](https://github.com/anthropics/claude-code/issues/103302)). A redraw keeps an `Input`'s
+  cursor where it was, but the desktop app scrolls the field back to the start of its text, so once
+  a remark is wider than the field you no longer see where you type. The mod therefore keeps typed
+  text out of shared state until your next action. A field that keeps its scroll across redraws
+  would let the counts and the full remark update live.
+- **Tool groups that stay open**
+  ([#103303](https://github.com/anthropics/claude-code/issues/103303)). The desktop app folds
+  consecutive tool calls into a collapsed group and does not honour a mod's `isExpanded` on it, so a
+  decision box next to another tool call is hidden. Claude is told to keep text between them.
+- **Visible refusals** ([#103304](https://github.com/anthropics/claude-code/issues/103304)). When
+  the engine refuses a mod's drawing, an installed mod falls back to the app's own row without a
+  word; the reason is only in the debug log.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 

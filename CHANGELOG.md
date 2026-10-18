@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.4 — 2026-10-18
+
+- README, "What would make it better": each item links to its issue on anthropics/claude-code
+  where one is filed, and the decision bar itself is proposed as a built-in feature in #103281.
+
 ## 1.2.3 — 2026-10-18
 
 - README, "What would make it better": a redraw keeps an `Input`'s cursor; what the desktop app
