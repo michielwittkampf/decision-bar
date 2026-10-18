@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-10-18
+
+- Fix: decision boxes in the chat fell back to the app's plain tool row whenever the bar was
+  empty (everything sent, or taken out with `remove`). The box sized its label column from the
+  bar's list, which made the width invalid and the engine refused the box; it now sizes from its
+  own proposals.
+
 ## 1.2.0 — 2026-10-18
 
 - Decision boxes in the chat: each call shows its decisions where Claude discusses them, with

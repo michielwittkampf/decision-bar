@@ -70,6 +70,8 @@ authors:
 - **Tool groups that stay open.** The desktop app folds consecutive tool calls into a collapsed
   group and does not honour a mod's `isExpanded` on it, so a decision box next to another tool call
   is hidden. Claude is told to keep text between them.
+- **Visible refusals.** When the engine refuses a mod's drawing, an installed mod falls back to the
+  app's own row without a word; the reason is only in the debug log.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
@@ -94,6 +96,11 @@ The `plugin-authoring` skill in Claude Code has the mod API for your version. Th
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
 - The test kit has no `$.store`; `setup` in the tests provides one.
+- A tree the engine refuses (a prop out of range, such as a width of `-Infinity` from
+  `Math.max()` over an empty list) is replaced by the app's own drawing without any visible
+  error in an installed plugin: the reason is only in the debug log (`claude --debug`). Run the
+  checkout with `--plugin-dir .` to see refusals as a line in the transcript, and in tests
+  `$.ui.mount` rejects with the reason.
 
 ## License
 

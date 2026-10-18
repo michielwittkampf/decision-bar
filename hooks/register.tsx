@@ -460,6 +460,8 @@ type Elements = { Box: any; Button: any; Text: any; Input?: any }
 
 // What the bar and the chat boxes share to draw decision rows: the elements, the state and the
 // handlers, with element keys under `prefix` so the bar's and each box's elements stay apart.
+// `shown` is what the label column is sized for: a chat box shows its own proposals, also when
+// they have all left the bar and `list` is empty.
 const rowView = async (
   $: EngineInterface,
   els: Elements,
@@ -467,6 +469,7 @@ const rowView = async (
   list: Proposal[],
   prefix: string,
   columns: number,
+  shown: Proposal[] = list,
 ) => {
   const { Box, Button, Text, Input } = els
   const t = translator(await read($, texts))
@@ -532,7 +535,7 @@ const rowView = async (
   const shownLabel = (p: Proposal) => (p.options ? t('question') : p.label)
   // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
   // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
-  const labelWidth = Math.min(14, Math.max(...list.map(p => [...shownLabel(p)].length)) + 2)
+  const labelWidth = Math.min(14, Math.max(0, ...shown.map(p => [...shownLabel(p)].length)) + 2)
   // A word longer than the column is broken with a hyphen. Outside the terminal soft hyphens let
   // the app break only where proportional text really needs it; the terminal gets hard breaks.
   const labelText = (p: Proposal) => breakLongWords(shownLabel(p), labelWidth - 1, roomy)
@@ -850,7 +853,7 @@ export const register: Register = on => {
     const list = await read($, proposals)
     const prefix = `chat-${e.props.tool_use_id}-`
     // Columns 0: the field takes its minimum width, so it stays on the row inside the box.
-    const v = await rowView($, els, e.surface, list, prefix, 0)
+    const v = await rowView($, els, e.surface, list, prefix, 0, asked)
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const doneRemarks = await read($, sentAnswerRemarks)

@@ -788,3 +788,47 @@ test('a group of tool calls with a decision box stays open; other groups are lef
   await $.ui.mount(group('Read'))
   expect(seen).toEqual([true, false])
 })
+
+// The bar's list can be empty while old boxes are still in the chat (everything sent, or taken
+// out with `remove`); the box then sizes its label column from its own proposals, not the bar's.
+const chatRow = (proposals: typeof PROPOSALS) =>
+  ({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  }) as const
+
+test('a chat box still draws once remove has emptied the bar', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  await $.tool.call({ tool: TOOL, ...EN, remove: ['T1'] })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const row = await $.ui.mount({ ...chatRow([PROPOSALS[0]!]), surface })
+    expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
+    expect(await row.find({ type: 'Text', text: 'closed' })).toBeDefined()
+  }
+})
+
+test('a chat box still draws once everything in it was sent and the bar is empty', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
+  const row = await $.ui.mount(chatRow(PROPOSALS.slice(0, 2)))
+  await row.press({ key: 'chat-call-1-agree-0' })
+  await row.press({ key: 'chat-call-1-disagree-1' })
+  await row.press({ key: 'chat-call-1-send-box' })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const again = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface })
+    expect(await again.find({ type: 'Text', text: '✓ agree' })).toBeDefined()
+    expect(await again.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
+  }
+})
