@@ -85,7 +85,7 @@ authors:
 Notes for working on it:
 
 - Typed text lives in `drafts`, not in `$.state`, and is committed by `commitDrafts` on any other
-  action; reading goes through `currentRemarks`. Keep it that way, or typing flickers again.
+  action; reading goes through `currentRemarks`. Keep it that way, or typing flickers.
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
 - Margins take numbers only (`marginTop={1}`).
