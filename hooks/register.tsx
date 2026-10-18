@@ -225,7 +225,7 @@ const INSTRUCTIONS = [
   '- `label`: the short name of the decision, such as "C13" or "Order". No "agree" in it: the user picks agree or disagree.',
   '- `text`: the proposal in one sentence, complete enough to understand without your reply; the bar shows label and text, both in the chat language.',
   '- In your reply, use the same label, in bold, for each proposal, so the user can find the row in the bar.',
-  'Put all decisions of a turn in one call, with your text before and after it and no other tool call right next to it: the desktop app folds consecutive tool calls into a collapsed group, which hides the decision box the call draws in the chat.',
+  'Each call draws a box with its decisions in the chat, so place it where you discuss them: several calls in one reply are fine, each after the text it belongs to. Always keep text between a call and any other tool call: the desktop app folds consecutive tool calls into a collapsed group, which hides the box.',
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
   'What is in the bar stays until the user sends or hides it, also while you chat. On a later call give only new or changed decisions: an existing label is updated, not duplicated. Remove a decision answered or overtaken in the chat with `remove: [label]`.',
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
