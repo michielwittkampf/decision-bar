@@ -3,11 +3,11 @@
 A [Claude Code](https://claude.com/claude-code) mod for working through many decisions without
 losing track of them.
 
-When Claude needs your input, the decisions it proposes appear as a box in the conversation,
-right where Claude discusses them, and are collected in a bar above the input field. Nothing
-interrupts you: keep working, do some research, ask Claude to change something in between. Answer
-when you are ready, in the order you choose — in the box, in context, or in the bar, which always
-shows what is still open and what you have already decided.
+When Claude needs your input, the decisions it proposes go into a bar above the input field
+instead of interrupting the conversation. They wait there while you keep working: do some
+research, ask Claude to change something in between, look into something else. Answer them when you are
+ready, in the order you choose — agree or disagree, add a remark, send one or all at once. The
+bar always shows what is still open and what you have already decided.
 
 ![The decision bar with two decisions, a remark shown in full, and Send all](docs/main.png)
 
@@ -38,9 +38,11 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 - **Many decisions, one overview.** As many open decisions as you need, each with its own choice
   and remark, and a heading that counts what is open and what is chosen. New questions join the
   list instead of replacing it.
-- **Decide in context.** Each set of decisions is a box in the chat, next to Claude's explanation.
-  Scroll back and answer it there later; a box shows what you sent, and `Send all` in a box sends
-  only that box.
+- **Decide in context.** The decisions also appear in the chat, right next to Claude's
+  reasoning. Answer there while you read, or later in the bar.
+
+  ![A decision box in the chat, with a choice, a remark and Send all](docs/box.png)
+
 - **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave
   the rest while you dig into them; Claude can keep working in the meantime.
 - **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
@@ -51,7 +53,7 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
 
 - **In your language.** Buttons, counts and answers follow the language of the chat.
 
-  ![The bar with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
+  ![The bar in Dutch, with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
 
 ## What would make it better
 

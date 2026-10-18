@@ -15,3 +15,16 @@ Put these demo decisions in the decision bar (language: en), in this order:
 
 For the screenshots: agree on Dark mode, disagree on Auth, and the remark "Seven is fine. Be
 gentle." on Decaf.
+
+The same set in Dutch, for the screenshot of the bar in another language (`docs/many.png`):
+
+```
+Zet deze demobeslissingen in de beslissingsbalk (language: nl), in deze volgorde:
+- Donkere modus: Lever de donkere modus op voor de nachtdienst.
+- Cafeïnevrij: Toon een vriendelijke waarschuwing als iemand vóór de middag zijn vijfde espresso bestelt.
+- Inloggen: Laat collega's inloggen met de SSO van het bedrijf. En beloon ze daar royaal voor; dikke berenknuffels en high fives.
+- Melk: Maak havermelk een standaardoptie, nu die twee keer zo goed verkoopt als gewone melk.
+- Easter egg: Speel een klein trompetgeluidje bij de duizendste bestelling van de maand.
+```
+
+For the screenshot: akkoord on Donkere modus, niet akkoord on Inloggen, and the remark "Zeven is prima. Be gentle." on Cafeïnevrij.

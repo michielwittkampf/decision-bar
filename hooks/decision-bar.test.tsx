@@ -258,6 +258,23 @@ test('remove takes out decisions answered in the chat', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^T2$/ })).toBeDefined()
 })
 
+test('remove takes out only what was in the bar: a label proposed in the same call stays', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  const res = await $.tool.call({
+    tool: TOOL,
+    ...EN,
+    remove: ['T1', 'T2'],
+    proposals: [{ label: 'T2', text: 'a new one with a used label' }],
+  })
+  expect(String(res.result)).toContain('Added: T2')
+  expect(String(res.result)).toContain('Removed: T1.')
+  expect(String(res.result)).toContain('Now open in the bar: T2')
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'a new one with a used label' })).toBeDefined()
+})
+
 test('Hide removes everything without sending anything', async ($, on) => {
   const sent = setup(on)
 

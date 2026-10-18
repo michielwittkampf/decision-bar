@@ -739,7 +739,10 @@ export const register: Register = on => {
       // Existing rows keep their choice and remark; an updated proposal (other text) starts again
       // without a decision. New labels are added, before a mirrored question.
       type Row = { p: Proposal; d: Decision; r: string }
-      const rows: Row[] = list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' }))
+      const before: Row[] = list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' }))
+      // `remove` takes out rows that were in the bar; a label proposed in this same call stays.
+      const removed = before.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
+      const rows = before.filter(row => row.p.options || !toRemove.has(row.p.label))
       const updated: string[] = []
       const added: string[] = []
       for (const p of admitted) {
@@ -756,11 +759,9 @@ export const register: Register = on => {
           rows.splice(at === -1 ? rows.length : at, 0, { p, d: null, r: '' })
         }
       }
-      const removed = rows.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
-      const rest = rows.filter(row => row.p.options || !toRemove.has(row.p.label))
-      const decisionRows = rest.filter(row => !row.p.options)
+      const decisionRows = rows.filter(row => !row.p.options)
       // No limit: a decision only leaves the bar when it is sent, hidden or removed.
-      const keep = [...decisionRows, ...rest.filter(row => row.p.options)]
+      const keep = [...decisionRows, ...rows.filter(row => row.p.options)]
 
       await update($, proposals, () => keep.map(row => row.p))
       await update($, decisions, () => keep.map(row => row.d))

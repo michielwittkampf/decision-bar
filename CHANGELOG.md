@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2 — 2026-10-18
+
+- Fix: a call that both proposes and removes the same label kept the new proposal out of the
+  bar. `remove` now only takes out decisions that were already there.
+- README: the shorter intro is back, a screenshot of a decision box in the chat, and the bar in
+  Dutch under "In your language".
+
 ## 1.2.1 — 2026-10-18
 
 - Fix: decision boxes in the chat fell back to the app's plain tool row whenever the bar was
