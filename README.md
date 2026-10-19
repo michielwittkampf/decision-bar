@@ -33,6 +33,10 @@ Click + next to the prompt box, then Plugins → Add marketplace → michielwitt
 
 Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
 
+**Not in a side chat of the desktop app.** The app shows nothing a mod draws there, so neither the
+bar nor the decision boxes appear; Claude asks in the chat instead. A change request is filed:
+[#103429](https://github.com/anthropics/claude-code/issues/103429).
+
 ## Why use it
 
 - **Many decisions, one overview.** As many open decisions as you need, each with its own choice
@@ -91,10 +95,11 @@ proposed as a built-in feature in
   the engine refuses a mod's drawing, an installed mod falls back to the app's own row without a
   word; the reason is only in the debug log.
 - **Mod drawing in a side chat** ([#103429](https://github.com/anthropics/claude-code/issues/103429)).
-  In the desktop app, a side chat shows nothing the mod draws: no bar above the prompt and no
-  decision box in the chat, although the mod runs there and stores the decisions. The mod notices
-  that it was never asked to draw there and tells Claude to ask in the chat instead; a session
-  started from another session (not as a side chat) shows the bar and the boxes.
+  decision-bar does not work in a side chat of the desktop app: the app shows nothing the mod
+  draws there, no bar above the prompt and no decision box in the chat, although the mod runs and
+  stores the decisions. The mod notices that it was never asked to draw there and tells Claude to
+  ask in the chat instead. A session started from another session (not as a side chat) shows the
+  bar and the boxes.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
