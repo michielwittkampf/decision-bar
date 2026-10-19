@@ -131,6 +131,20 @@ const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
 let drafts = new Map<string, string>()
 // The field (`key`) last typed in: focus moving there is not another action.
 let lastField: string | undefined
+// The surfaces on which the app asked this mod itself to draw its bar or a chat box. Not that the
+// session has a surface (`$.session.surfaces()` lists every client, also one there for another
+// mod's pane or another feature), but that this mod's own drawing was asked there: a side chat in
+// the desktop app runs the mod but never asks it to draw.
+let drawnOn = new Set<string>()
+
+// Whether the user can see the bar now: this mod drew on a surface that is still attached. Where
+// the engine cannot say which surfaces are attached, assume it can.
+const isVisible = async ($: EngineInterface) => {
+  const attached = await $.session.surfaces().catch(() => undefined)
+  return attached === undefined || attached.some(s => drawnOn.has(s))
+}
+const NOT_VISIBLE =
+  'Not visible: this session has not drawn the bar or a decision box (for example a side chat in the desktop app), so the user cannot see them. Ask these decisions in your reply as well, with the same labels, and do not say they are in the bar. They stay in the bar in case it appears; remove them with `remove` once answered.'
 const currentRemarks = (list: Proposal[], stored: string[]) =>
   list.map((p, i) => drafts.get(rowKey(p)) ?? stored[i] ?? '')
 const commitDrafts = async ($: EngineInterface) => {
@@ -229,6 +243,7 @@ const INSTRUCTIONS = [
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
   'What is in the bar stays until the user sends or hides it, also while you chat. On a later call give only new or changed decisions: an existing label is updated, not duplicated. Remove a decision answered or overtaken in the chat with `remove: [label]`.',
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
+  'If the tool result starts a sentence with "Not visible", the user cannot see the bar in this session (for example a side chat in the desktop app): ask those decisions in your reply as well, with the same labels, and do not say they are in the bar.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only when the bar would show in the wrong language: (1) right before you end a turn with a question and answer buttons in the next-step box (the bar copies it) while the chat is not in the bar language, or (2) at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
   'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>" or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
@@ -630,6 +645,7 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
 export const register: Register = on => {
   drafts = new Map()
   lastField = undefined
+  drawnOn = new Set()
 
   on('session.start', async ($, e, next) => {
     await $.tool.register({
@@ -777,6 +793,7 @@ export const register: Register = on => {
 
       const sentence = (head: string, labels: string[]) => (labels.length > 0 ? `${head}: ${labels.join(', ')}.` : '')
       const open = keep.filter(row => !row.p.options).map(row => row.p.label)
+      const visible = await isVisible($)
       return {
         result: [
           sentence('Added', added),
@@ -784,6 +801,7 @@ export const register: Register = on => {
           sentence('Removed', removed),
           sentence('Not shown, hidden earlier by the user', skipped),
           open.length > 0 ? `Now open in the bar: ${open.join(', ')}.` : 'The bar has no open decisions.',
+          open.length > 0 && !visible ? NOT_VISIBLE : '',
           languageSentence,
         ]
           .filter(s => s !== '')
@@ -851,6 +869,7 @@ export const register: Register = on => {
     if (!(e.props.tool === TOOL_FULL || e.props.tool.endsWith(`decision-bar__${TOOL}`))) {
       return next(e)
     }
+    drawnOn.add(e.surface)
     const input = e.props.input as { proposals?: unknown }
     const asked = (Array.isArray(input?.proposals) ? input.proposals : [])
       .filter((p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string')
@@ -931,6 +950,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // Asked to draw the band, also while it is empty: the bar can be seen on this surface.
+    drawnOn.add(e.surface)
     const list = await read($, proposals)
 
     // Also visible while Claude works (a sent message then waits until the turn is done) and while

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.6 — 2026-10-19
+
+- Where the user cannot see the bar, Claude asks in the chat. The tool result says "Not visible"
+  when the app never asked this mod to draw its bar or a chat box on a surface that is still
+  attached, as in a side chat of the desktop app
+  ([#103429](https://github.com/anthropics/claude-code/issues/103429)). Another surface of the
+  session (another mod's pane, a phone that never drew the bar) does not count. The rows stay in
+  the bar in case it appears.
+- README: the side chat item under "What would make it better" says what the mod does there.
+
 ## 1.2.5 — 2026-10-19
 
 - Decision box in the chat, terminal only: no remark field, which could be seen but not typed in

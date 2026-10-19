@@ -864,3 +864,53 @@ test('in the terminal a chat box shows the remark as text, without a field; the 
   expect(await desktop.find({ key: 'chat-call-1-remark-1' })).toBeDefined()
   expect(await desktop.find({ type: 'Text', text: '✎ rather purple' })).toBeUndefined()
 })
+
+// Visibility: the bar counts as visible only where the app asked this mod itself to draw it (the
+// bar or a chat box) on a surface that is still attached. A side chat in the desktop app runs the
+// mod but never asks it to draw; another surface of the session (another mod's pane, a phone that
+// never drew the bar) does not count.
+const NOT_VISIBLE = 'Not visible'
+
+test('nothing attached (a side chat): the result says so, and the rows stay in the bar', async ($, on) => {
+  setup(on)
+  on('session.surfaces', () => ({ value: [] }))
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  expect(String(res.result)).toContain(NOT_VISIBLE)
+  expect(String(res.result)).toContain('Now open in the bar: T1, T2, T3')
+})
+
+test('a surface the bar was never drawn on does not count', async ($, on) => {
+  setup(on)
+  on('session.surfaces', () => ({ value: ['desktop'] }))
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  expect(String(res.result)).toContain(NOT_VISIBLE)
+})
+
+test('the bar drawn on an attached surface: no warning, on terminal and desktop', async ($, on) => {
+  setup(on)
+  let attached: ('terminal' | 'desktop')[] = []
+  on('session.surfaces', () => ({ value: attached }))
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    attached = [surface]
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+    expect(String(res.result)).not.toContain(NOT_VISIBLE)
+    await ui.unmount()
+  }
+})
+
+test('drawn on a surface that has left: not visible again', async ($, on) => {
+  setup(on)
+  let attached: ('desktop' | 'mobile')[] = ['desktop']
+  on('session.surfaces', () => ({ value: attached }))
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.unmount()
+  attached = ['mobile']
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  expect(String(res.result)).toContain(NOT_VISIBLE)
+})

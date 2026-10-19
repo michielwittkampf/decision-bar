@@ -92,9 +92,9 @@ proposed as a built-in feature in
   word; the reason is only in the debug log.
 - **Mod drawing in a side chat** ([#103429](https://github.com/anthropics/claude-code/issues/103429)).
   In the desktop app, a side chat shows nothing the mod draws: no bar above the prompt and no
-  decision box in the chat, although the mod runs there and stores the decisions. In a side chat,
-  answer in the chat; a session started from another session (not as a side chat) shows the bar
-  and the boxes.
+  decision box in the chat, although the mod runs there and stores the decisions. The mod notices
+  that it was never asked to draw there and tells Claude to ask in the chat instead; a session
+  started from another session (not as a side chat) shows the bar and the boxes.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
@@ -120,6 +120,10 @@ The `plugin-authoring` skill in Claude Code has the mod API for your version. Th
   field back to the start of its text, so a remark wider than the field is typed out of sight. A
   test with short text does not show this.
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
+- Whether the user can see the bar is `isVisible`: the app asked this mod itself to draw its bar
+  or a chat box (`drawnOn`) on a surface that `$.session.surfaces()` still lists. The list alone
+  is not enough: it holds every client of the session, also one there for another mod's pane or
+  another feature. In tests, answer `session.surfaces` with `{ value: [...] }`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
 - The test kit has no `$.store`; `setup` in the tests provides one.
 - A tree the engine refuses (a prop out of range, such as a width of `-Infinity` from
