@@ -90,6 +90,11 @@ proposed as a built-in feature in
 - **Visible refusals** ([#103304](https://github.com/anthropics/claude-code/issues/103304)). When
   the engine refuses a mod's drawing, an installed mod falls back to the app's own row without a
   word; the reason is only in the debug log.
+- **Mod drawing in btw forks** ([#103429](https://github.com/anthropics/claude-code/issues/103429)).
+  In the desktop app, a side question opened as a btw fork shows nothing the mod draws: no bar
+  above the prompt and no decision box in the chat, although the mod runs there and stores the
+  decisions. In a btw fork, answer in the chat; a session started from another session (not as a
+  btw fork) shows the bar and the boxes.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
