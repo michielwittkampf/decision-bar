@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.5 — 2026-10-19
+
+- Decision box in the chat, terminal only: no remark field, which could be seen but not typed in
+  (a transcript row takes no keys there). The remark typed in the bar shows as text, `✎ …`. The
+  desktop app keeps the field.
+- README: the terminal limit under "Decide in context" and "What would make it better".
+
 ## 1.2.4 — 2026-10-18
 
 - README, "What would make it better": each item links to its issue on anthropics/claude-code

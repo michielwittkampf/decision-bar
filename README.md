@@ -39,7 +39,8 @@ Works in the desktop app (Code tab) and in the terminal; on mobile with buttons 
   and remark, and a heading that counts what is open and what is chosen. New questions join the
   list instead of replacing it.
 - **Decide in context.** The decisions also appear in the chat, right next to Claude's
-  reasoning. Answer there while you read, or later in the bar.
+  reasoning. Answer there while you read, or later in the bar. In the terminal you type a remark
+  in the bar; the box in the chat shows it.
 
   ![A decision box in the chat, with a choice, a remark and Send all](docs/box.png)
 
@@ -82,6 +83,10 @@ proposed as a built-in feature in
   ([#103303](https://github.com/anthropics/claude-code/issues/103303)). The desktop app folds
   consecutive tool calls into a collapsed group and does not honour a mod's `isExpanded` on it, so a
   decision box next to another tool call is hidden. Claude is told to keep text between them.
+- **Keys for rows in the chat.** In the terminal only the band above the prompt and panes take
+  keys, so a field in a transcript row can be shown but not typed in. The decision box there shows
+  the remark as text and leaves typing to the bar; the desktop app takes input in the chat, and
+  keeps the field.
 - **Visible refusals** ([#103304](https://github.com/anthropics/claude-code/issues/103304)). When
   the engine refuses a mod's drawing, an installed mod falls back to the app's own row without a
   word; the reason is only in the debug log.

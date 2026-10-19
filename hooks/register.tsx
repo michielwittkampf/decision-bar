@@ -461,7 +461,8 @@ type Elements = { Box: any; Button: any; Text: any; Input?: any }
 // What the bar and the chat boxes share to draw decision rows: the elements, the state and the
 // handlers, with element keys under `prefix` so the bar's and each box's elements stay apart.
 // `shown` is what the label column is sized for: a chat box shows its own proposals, also when
-// they have all left the bar and `list` is empty.
+// they have all left the bar and `list` is empty. `remarkAsText`: no field, the remark as plain
+// text (a chat box in the terminal, where only the bar and panes take keys).
 const rowView = async (
   $: EngineInterface,
   els: Elements,
@@ -470,8 +471,10 @@ const rowView = async (
   prefix: string,
   columns: number,
   shown: Proposal[] = list,
+  remarkAsText = false,
 ) => {
-  const { Box, Button, Text, Input } = els
+  const { Box, Button, Text } = els
+  const Input = remarkAsText ? undefined : els.Input
   const t = translator(await read($, texts))
   const dec = await read($, decisions)
   const stored = await read($, remarks)
@@ -548,7 +551,7 @@ const rowView = async (
     )
   return {
     Box, Button, Text, Input, t, prefix, dec, stored, rem, sent, showFull, isStale,
-    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth,
+    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
   }
 }
 type RowView = Awaited<ReturnType<typeof rowView>>
@@ -602,13 +605,18 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
             />
           </Box>
         )}
+        {v.remarkAsText && rem[i]?.trim() && (
+          <Text key={`${k}remark-text-${i}`} dimColor>
+            {`✎ ${rem[i]!.trim()}`}
+          </Text>
+        )}
         {sent[rowKey(p)] !== undefined && !rem[i]?.trim() && (
           <Text key={`${k}sent-${i}`} dimColor>
             {t('remarkSent')}
           </Text>
         )}
       </Box>
-      {showFull(i) && (
+      {showFull(i) && !v.remarkAsText && (
         <Box key={`${k}full-${i}`} marginLeft={v.labelWidth + 1}>
           <Text key={`${k}full-remark-${i}`} dimColor strikethrough={isStale(p)}>
             {stored[i]}
@@ -853,8 +861,9 @@ export const register: Register = on => {
     const els = $.ui.resolve(e) as unknown as Elements
     const list = await read($, proposals)
     const prefix = `chat-${e.props.tool_use_id}-`
-    // Columns 0: the field takes its minimum width, so it stays on the row inside the box.
-    const v = await rowView($, els, e.surface, list, prefix, 0, asked)
+    // Columns 0: the field takes its minimum width, so it stays on the row inside the box. A
+    // transcript row takes no keys in the terminal, so there the remark is text, typed in the bar.
+    const v = await rowView($, els, e.surface, list, prefix, 0, asked, e.surface === 'terminal')
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const doneRemarks = await read($, sentAnswerRemarks)

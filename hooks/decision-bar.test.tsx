@@ -849,3 +849,18 @@ test('a chat box still draws once everything in it was sent and the bar is empty
     expect(await again.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
   }
 })
+
+test('in the terminal a chat box shows the remark as text, without a field; the desktop keeps the field', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
+  const bar = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await bar.input({ key: 'remark-1', text: 'rather purple', kind: 'change' })
+  await bar.press({ key: 'agree-0' })
+  const terminal = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface: 'terminal' })
+  expect(await terminal.find({ key: 'chat-call-1-remark-1' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Text', text: '✎ rather purple' })).toBeDefined()
+  const desktop = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface: 'desktop' })
+  expect(await desktop.find({ key: 'chat-call-1-remark-1' })).toBeDefined()
+  expect(await desktop.find({ type: 'Text', text: '✎ rather purple' })).toBeUndefined()
+})
