@@ -534,38 +534,61 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Elements = { Box: any; Button: any; Text: any; Input?: any }
 
-// What the bar and the chat boxes share to draw decision rows: the elements, the state and the
-// handlers, with element keys under `prefix` so the bar's and each box's elements stay apart.
-// `shown` is what the label column is sized for: a chat box shows its own proposals, also when
-// they have all left the bar and `list` is empty. `remarkAsText`: no field, the remark as plain
-// text (a chat box in the terminal, where only the bar and panes take keys).
+// How the bar or a chat box asks for its rows. `rows` are the bar's rows. Element keys go under
+// `prefix`, so the bar's and each box's elements stay apart. `shown` is what the label column is
+// sized for: a chat box shows its own proposals, also when they have all left the bar and `rows`
+// is empty. `remarkAsText`: no field, the remark as plain text (a chat box in the terminal, where
+// only the bar and panes take keys).
+type RowViewOptions = {
+  surface: string
+  rows: Row[]
+  prefix: string
+  columns: number
+  shown?: Proposal[]
+  remarkAsText?: boolean
+}
+
+// What the bar and the chat boxes share to draw rows: the elements, the state and the handlers.
+// `stored` holds the rows as committed, `current` the same with what is being typed (`drafts`).
+type RowView = Elements & {
+  t: Translate
+  prefix: string
+  stored: Row[]
+  current: Row[]
+  sent: Record<string, string>
+  showFull: (i: number) => boolean
+  isStale: (p: Proposal) => boolean
+  setRemark: (i: number, text: string) => Promise<void>
+  keepAndSend: (i: number, text: string) => Promise<void>
+  choose: (i: number, decision: Exclude<Decision, null>) => Promise<unknown>
+  pick: (i: number, option: Option) => Promise<void>
+  roomy: boolean
+  labelText: (p: Proposal) => string
+  labelWidth: number
+  fieldWidth: (buttons: string[]) => number
+  remarkAsText: boolean
+}
+
 const rowView = async (
   $: EngineInterface,
   els: Elements,
-  surface: string,
-  list: Row[],
-  prefix: string,
-  columns: number,
-  shown: Proposal[] = list.map(row => row.p),
-  remarkAsText = false,
-) => {
+  { surface, rows: stored, prefix, columns, shown = stored.map(row => row.p), remarkAsText = false }: RowViewOptions,
+): Promise<RowView> => {
   const { Box, Button, Text } = els
   const Input = remarkAsText ? undefined : els.Input
   const t = translator(await read($, texts))
-  const dec = list.map(row => row.d)
-  const stored = list.map(row => row.r)
-  const rem = withDrafts(list).map(row => row.r)
+  const current = withDrafts(stored)
   const sent = await read($, sentRemarks)
   const beingEdited = await read($, editing)
   // The line shows the last committed text; while the field is edited it is struck through:
   // visibly stale, until the next action updates it.
-  const showFull = (i: number) => (stored[i]?.trim().length ?? 0) > LONG_REMARK
+  const showFull = (i: number) => (stored[i]?.r.trim().length ?? 0) > LONG_REMARK
   const isStale = (p: Proposal) => beingEdited.includes(rowKey(p))
 
   // Typing does not redraw (see `drafts`); only clearing "✓ remark sent" or striking through the
   // full remark does, once.
   const setRemark = async (i: number, text: string) => {
-    const p = list[i]?.p
+    const p = stored[i]?.p
     if (!p) {
       return
     }
@@ -577,7 +600,7 @@ const rowView = async (
     }
     drafts.set(rowKey(p), text)
     lastField = field
-    if ((stored[i]?.trim().length ?? 0) > LONG_REMARK && !beingEdited.includes(rowKey(p))) {
+    if (showFull(i) && !beingEdited.includes(rowKey(p))) {
       await update($, editing, old => [...old, rowKey(p)])
     }
     if (sent[rowKey(p)] !== undefined && sent[rowKey(p)] !== text.trim()) {
@@ -595,7 +618,7 @@ const rowView = async (
     }
     const done = await send($, [i])
     if (!done) {
-      $.ui.toast(list[i]?.p.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
+      $.ui.toast(stored[i]?.p.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
     }
   }
   // Pressing the chosen state again sets it back to "no decision".
@@ -603,6 +626,7 @@ const rowView = async (
     commitDrafts($).then(() =>
       update($, rows, old => old.map((row, j) => (j === i ? { ...row, d: row.d === decision ? null : decision } : row))),
     )
+  const pick = (i: number, option: Option) => pickOption($, i, option)
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
   const roomy = surface !== 'terminal'
@@ -622,28 +646,72 @@ const rowView = async (
       columns - (roomy ? 1 : 0) - (labelWidth + 1) - [...buttons, t('send')].reduce((sum, b) => sum + buttonWidth(b), 0) - 1,
     )
   return {
-    Box, Button, Text, Input, t, prefix, dec, stored, rem, sent, showFull, isStale,
-    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
+    Box, Button, Text, Input, t, prefix, stored, current, sent, showFull, isStale,
+    setRemark, keepAndSend, choose, pick, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
   }
 }
-type RowView = Awaited<ReturnType<typeof rowView>>
+
+// The top line of every row: the label in its column, and the proposal or question next to it.
+const rowTop = (v: RowView, p: Proposal, i: number, kind: 'proposal' | 'question') => {
+  const { Box, Text, prefix: k } = v
+  return (
+    <Box key={`${k}top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
+      <Box key={`${k}label-box-${i}`} width={v.labelWidth} flexShrink={0}>
+        <Text key={`${k}label-${i}`} bold>
+          {v.labelText(p)}
+        </Text>
+      </Box>
+      <Box key={`${k}${kind}-box-${i}`} flexGrow={1} flexShrink={1}>
+        <Text key={`${k}${kind}-${i}`}>{p.text}</Text>
+      </Box>
+    </Box>
+  )
+}
+
+// The remark field, or for a question the field for an own answer. Enter or its button sends only
+// this row; the rest stays. `buttons` stand before it on the line and set its width.
+const remarkField = (v: RowView, i: number, placeholder: string, buttons: string[]) => {
+  const { Box, Input, prefix: k } = v
+  return (
+    Input && (
+      <Box key={`${k}field-${i}`} flexGrow={1} minWidth={20} width={v.fieldWidth(buttons)}>
+        <Input
+          key={`${k}remark-${i}`}
+          placeholder={placeholder}
+          value={v.current[i]?.r ?? ''}
+          submitLabel={v.t('send')}
+          onInput={(text: string) => void v.setRemark(i, text)}
+          onSubmit={(text: string) => void v.keepAndSend(i, text)}
+        />
+      </Box>
+    )
+  )
+}
+
+// A remark longer than the field, in full below the row (see `showFull`).
+const fullRemark = (v: RowView, p: Proposal, i: number) => {
+  const { Box, Text, prefix: k } = v
+  return (
+    v.showFull(i) &&
+    !v.remarkAsText && (
+      <Box key={`${k}full-${i}`} marginLeft={v.labelWidth + 1}>
+        <Text key={`${k}full-remark-${i}`} dimColor strikethrough={v.isStale(p)}>
+          {v.stored[i]!.r}
+        </Text>
+      </Box>
+    )
+  )
+}
 
 // One decision row: label, proposal, agree / disagree, remark field and its full text below.
 const decisionRow = (v: RowView, p: Proposal, i: number) => {
-  const { Box, Button, Text, Input, t, prefix: k, dec, rem, sent, stored, showFull, isStale } = v
+  const { Box, Button, Text, t, prefix: k, sent } = v
+  const d = v.stored[i]?.d ?? null
+  const r = v.current[i]?.r ?? ''
   return (
     // Outside the terminal some air around the buttons, and clearly more between rows.
     <Box key={`${k}row-${i}`} flexDirection="column" rowGap={v.roomy ? 1 : 0} marginTop={v.roomy && i > 0 ? 1 : 0}>
-      <Box key={`${k}top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
-        <Box key={`${k}label-box-${i}`} width={v.labelWidth} flexShrink={0}>
-          <Text key={`${k}label-${i}`} bold>
-            {v.labelText(p)}
-          </Text>
-        </Box>
-        <Box key={`${k}proposal-box-${i}`} flexGrow={1} flexShrink={1}>
-          <Text key={`${k}proposal-${i}`}>{p.text}</Text>
-        </Box>
-      </Box>
+      {rowTop(v, p, i, 'proposal')}
       <Box
         key={`${k}choice-${i}`}
         flexDirection="row"
@@ -654,47 +722,159 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
       >
         <Button
           key={`${k}agree-${i}`}
-          label={`${dec[i] === 'agree' ? '●' : '○'} ${t('agree')}`}
-          variant={dec[i] === 'agree' ? 'primary' : 'secondary'}
+          label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
+          variant={d === 'agree' ? 'primary' : 'secondary'}
           onPress={() => v.choose(i, 'agree')}
         />
         <Button
           key={`${k}disagree-${i}`}
-          label={`${dec[i] === 'disagree' ? '●' : '○'} ${t('disagree')}`}
-          variant={dec[i] === 'disagree' ? 'primary' : 'secondary'}
+          label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
+          variant={d === 'disagree' ? 'primary' : 'secondary'}
           onPress={() => v.choose(i, 'disagree')}
         />
-        {Input && (
-          <Box key={`${k}field-${i}`} flexGrow={1} minWidth={20} width={v.fieldWidth([`○ ${t('agree')}`, `○ ${t('disagree')}`])}>
-            <Input
-              key={`${k}remark-${i}`}
-              placeholder={t('remarkField')}
-              value={rem[i] ?? ''}
-              // Enter or the button: send only this row; the rest stays.
-              submitLabel={t('send')}
-              onInput={(text: string) => void v.setRemark(i, text)}
-              onSubmit={(text: string) => void v.keepAndSend(i, text)}
-            />
-          </Box>
-        )}
-        {v.remarkAsText && rem[i]?.trim() && (
+        {remarkField(v, i, t('remarkField'), [`○ ${t('agree')}`, `○ ${t('disagree')}`])}
+        {v.remarkAsText && r.trim() && (
           <Text key={`${k}remark-text-${i}`} dimColor>
-            {`✎ ${rem[i]!.trim()}`}
+            {`✎ ${r.trim()}`}
           </Text>
         )}
-        {sent[rowKey(p)] !== undefined && !rem[i]?.trim() && (
+        {sent[rowKey(p)] !== undefined && !r.trim() && (
           <Text key={`${k}sent-${i}`} dimColor>
             {t('remarkSent')}
           </Text>
         )}
       </Box>
-      {showFull(i) && !v.remarkAsText && (
-        <Box key={`${k}full-${i}`} marginLeft={v.labelWidth + 1}>
-          <Text key={`${k}full-remark-${i}`} dimColor strikethrough={isStale(p)}>
-            {stored[i]}
-          </Text>
+      {fullRemark(v, p, i)}
+    </Box>
+  )
+}
+
+// A question from the next-step box, in the same columns as the decisions: "Question" in the label
+// column, the question next to it, and the answers below, indented to under the question.
+const questionRow = (v: RowView, p: Proposal, i: number) => {
+  const { Box, Button, prefix: k } = v
+  const options = p.options ?? []
+  return (
+    <Box key={`${k}row-${i}`} flexDirection="column" rowGap={1} marginTop={i > 0 ? 1 : 0}>
+      {rowTop(v, p, i, 'question')}
+      <Box
+        key={`${k}options-${i}`}
+        flexDirection="row"
+        alignItems="center"
+        flexWrap="wrap"
+        columnGap={1}
+        marginLeft={v.labelWidth + 1}
+      >
+        {options.map((o, n) => (
+          <Button
+            key={`${k}option-${i}-${n}`}
+            label={o.label}
+            variant={n === 0 ? 'primary' : 'secondary'}
+            onPress={() => v.pick(i, o)}
+          />
+        ))}
+        {remarkField(v, i, v.t('answerField'), options.map(o => o.label))}
+      </Box>
+      {fullRemark(v, p, i)}
+    </Box>
+  )
+}
+
+// After Hide, in place of the bar: how many decisions went, with Restore and Close.
+const hiddenNotice = ($: EngineInterface, els: Elements, t: Translate, n: number) => {
+  const { Box, Button, Text } = els
+  return (
+    <Box flexDirection="row" alignItems="center" columnGap={1}>
+      <Text key="hidden" dimColor>
+        {n === 1 ? t('hiddenOne') : t('hiddenMany', { n })} {t('restoreLater', { command: COMMAND })}
+      </Text>
+      <Button key="restore" label={t('restore')} onPress={() => void restore($)} />
+      <Button
+        key="close"
+        label={t('close')}
+        role="dismiss"
+        onPress={() => update($, lastHidden, s => (s ? { ...s, show: false } : s))}
+      />
+    </Box>
+  )
+}
+
+// What the collapsed and the expanded bar both need.
+const barBasics = ($: EngineInterface, v: RowView) => ({
+  all: v.stored.map((_, i) => i),
+  // With one row no "all": you would look for what else goes along.
+  sendLabel: v.t(v.stored.length === 1 ? 'sendOne' : 'sendAll'),
+  toggle: () => commitDrafts($).then(() => update($, collapsed, c => !c)),
+})
+
+// Collapsed: one line with the heading as a button, the state of each row, and Send all once
+// something is chosen or typed.
+const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
+  const { Box, Button, Text, t, current } = v
+  const { all, sendLabel, toggle } = barBasics($, v)
+  const hasSomething = current.some(row => row.d !== null || row.r.trim())
+  // Per row its state: ✓ agree / ✗ disagree / ○ nothing yet, ✎ with a remark.
+  const summary = current
+    .map(({ p, d, r }) => {
+      const pen = r.trim() ? ' ✎' : ''
+      if (p.options) {
+        return `${t('question')}${pen}`
+      }
+      const state = d === 'agree' ? '✓' : d === 'disagree' ? '✗' : '○'
+      return `${p.label} ${state}${pen}`
+    })
+    .join(SEPARATOR)
+  // If the summary does not fit in two lines next to the buttons, only the counts. Outside the
+  // terminal text is narrower than a cell: about 30% more fits on a line there.
+  const room =
+    (columns - buttonWidth(`${CLOSED} ${t('heading')}`) - (hasSomething ? buttonWidth(sendLabel) : 0)) *
+    (v.roomy ? 1.3 : 1)
+  const lines = columns > 0 ? lineCount(summary, room) : 1
+  return (
+    <Box flexDirection="row" alignItems="center" columnGap={1}>
+      <Button key="toggle" label={`${CLOSED} ${t('heading')}`} onPress={toggle} />
+      <Box key="summary-box" flexGrow={1} flexShrink={1}>
+        <Text key="summary" dimColor>
+          {lines > 2 ? miniSummary(t, current) : summary}
+        </Text>
+      </Box>
+      {hasSomething && <Button key="send-all" label={sendLabel} variant="primary" onPress={() => send($, all)} />}
+    </Box>
+  )
+}
+
+// Expanded: the heading with the counts, every row, and the buttons that act on all of them.
+const expandedBar = ($: EngineInterface, v: RowView) => {
+  const { Box, Button, Text, t, stored, current } = v
+  const { all, sendLabel, toggle } = barBasics($, v)
+  const decisionCount = stored.filter(row => !row.p.options).length
+  // "Send all" is always there: typing a remark alone does not redraw the bar, so the button
+  // would otherwise appear only after another action.
+  const sendAll = async () => {
+    if (!(await send($, all))) {
+      $.ui.toast(t('nothingToSendDecision'))
+    }
+  }
+  return (
+    <Box flexDirection="column" rowGap={1}>
+      <Box key="heading" flexDirection="row" alignItems="center" columnGap={1}>
+        <Button key="toggle" label={`${OPENED} ${t('heading')}`} plain onPress={toggle} />
+        <Text key="tally" dimColor>
+          {headingTally(t, current)}
+        </Text>
+      </Box>
+      {/* Outside the terminal the chevron sits a little to the right because of the button's
+          border: the content moves one cell along so it lines up below it. */}
+      <Box key="content" flexDirection="column" rowGap={1} marginLeft={v.roomy ? 1 : 0}>
+        {stored.map(({ p }, i) => (p.options ? questionRow(v, p, i) : decisionRow(v, p, i)))}
+        <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
+          <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
+          {decisionCount > 0 && (
+            <Button key="agree-all" label={t(decisionCount === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
+          )}
+          <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
         </Box>
-      )}
+      </Box>
     </Box>
   )
 }
@@ -888,13 +1068,20 @@ export const register: Register = on => {
     const prefix = `chat-${e.props.tool_use_id}-`
     // Columns 0: the field takes its minimum width, so it stays on the row inside the box. A
     // transcript row takes no keys in the terminal, so there the remark is text, typed in the bar.
-    const v = await rowView($, els, e.surface, list, prefix, 0, asked, e.surface === 'terminal')
+    const v = await rowView($, els, {
+      surface: e.surface,
+      rows: list,
+      prefix,
+      columns: 0,
+      shown: asked,
+      remarkAsText: e.surface === 'terminal',
+    })
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const doneRemarks = await read($, sentAnswerRemarks)
     const indexOf = (p: Proposal) => list.findIndex(row => !row.p.options && rowKey(row.p) === rowKey(p))
     const openIndexes = asked.map(indexOf).filter(i => i >= 0)
-    const openRows = withDrafts(openIndexes.map(i => list[i]!))
+    const openRows = openIndexes.map(i => v.current[i]!)
     const sendBox = async () => {
       if (!(await send($, openIndexes))) {
         $.ui.toast(t('nothingToSendDecision'))
@@ -961,158 +1148,15 @@ export const register: Register = on => {
     // Also visible while Claude works (a sent message then waits until the turn is done) and while
     // the app holds the spot (`hasSurvey`): otherwise the bar disappears the moment the next-step
     // box appears, which is exactly when it is needed.
-    const table = $.ui.resolve(e)
-    const { Box, Button, Text } = table
-    const t = translator(await read($, texts))
-
+    const table = $.ui.resolve(e) as Elements
     if (list.length === 0) {
       const set = await read($, lastHidden)
       if (!set || !set.show || set.rows.length === 0) {
         return next(e)
       }
-      const n = set.rows.length
-      return (
-        <Box flexDirection="row" alignItems="center" columnGap={1}>
-          <Text key="hidden" dimColor>
-            {n === 1 ? t('hiddenOne') : t('hiddenMany', { n })} {t('restoreLater', { command: COMMAND })}
-          </Text>
-          <Button key="restore" label={t('restore')} onPress={() => void restore($)} />
-          <Button
-            key="close"
-            label={t('close')}
-            role="dismiss"
-            onPress={() => update($, lastHidden, s => (s ? { ...s, show: false } : s))}
-          />
-        </Box>
-      )
+      return hiddenNotice($, table, translator(await read($, texts)), set.rows.length)
     }
-
-    const v = await rowView($, table as Elements, e.surface, list, '', e.props.bodyColumns)
-    const { Input, dec, stored, rem, showFull, isStale, setRemark, keepAndSend, roomy, labelWidth, labelText, fieldWidth } = v
-    const hasDecisions = list.some(row => !row.p.options)
-    const all = list.map((_, i) => i)
-    // With one row no "all": you would look for what else goes along.
-    const sendLabel = t(list.length === 1 ? 'sendOne' : 'sendAll')
-    const agreeLabel = t(list.filter(row => !row.p.options).length === 1 ? 'agreeOne' : 'agreeAll')
-    const hasSomething = all.some(i => (dec[i] ?? null) !== null || rem[i]?.trim())
-    const isCollapsed = await read($, collapsed)
-
-    // Per row its state: ✓ agree / ✗ disagree / ○ nothing yet, ✎ with a remark.
-    const summary = list
-      .map(({ p }, i) => {
-        const pen = rem[i]?.trim() ? ' ✎' : ''
-        if (p.options) {
-          return `${t('question')}${pen}`
-        }
-        const state = dec[i] === 'agree' ? '✓' : dec[i] === 'disagree' ? '✗' : '○'
-        return `${p.label} ${state}${pen}`
-      })
-      .join(SEPARATOR)
-    // If the summary does not fit in two lines next to the buttons, only the counts. Outside the
-    // terminal text is narrower than a cell: about 30% more fits on a line there.
-    const room =
-      (e.props.bodyColumns - buttonWidth(`${CLOSED} ${t('heading')}`) - (hasSomething ? buttonWidth(sendLabel) : 0)) *
-      (roomy ? 1.3 : 1)
-    const collapsedLines = (text: string) => (e.props.bodyColumns > 0 ? lineCount(text, room) : 1)
-    const toggle = () => commitDrafts($).then(() => update($, collapsed, c => !c))
-    // Expanded, "Send all" is always there: typing a remark alone does not redraw the bar, so the
-    // button would otherwise appear only after another action.
-    const sendAll = async () => {
-      if (!(await send($, all))) {
-        $.ui.toast(t('nothingToSendDecision'))
-      }
-    }
-
-    if (isCollapsed) {
-      return (
-        <Box flexDirection="row" alignItems="center" columnGap={1}>
-          <Button key="toggle" label={`${CLOSED} ${t('heading')}`} onPress={toggle} />
-          <Box key="summary-box" flexGrow={1} flexShrink={1}>
-            <Text key="summary" dimColor>
-              {collapsedLines(summary) > 2 ? miniSummary(t, withDrafts(list)) : summary}
-            </Text>
-          </Box>
-          {hasSomething && (
-            <Button key="send-all" label={sendLabel} variant="primary" onPress={() => send($, all)} />
-          )}
-        </Box>
-      )
-    }
-
-    return (
-      <Box flexDirection="column" rowGap={1}>
-        <Box key="heading" flexDirection="row" alignItems="center" columnGap={1}>
-          <Button key="toggle" label={`${OPENED} ${t('heading')}`} plain onPress={toggle} />
-          <Text key="tally" dimColor>
-            {headingTally(t, withDrafts(list))}
-          </Text>
-        </Box>
-        {/* Outside the terminal the chevron sits a little to the right because of the button's
-            border: the content moves one cell along so it lines up below it. */}
-        <Box key="content" flexDirection="column" rowGap={1} marginLeft={roomy ? 1 : 0}>
-          {list.map(({ p }, i) =>
-            p.options ? (
-              // Same columns as the decisions: "Question" in the label column, the question next to
-              // it, and the answers below, indented to under the question.
-              <Box key={`row-${i}`} flexDirection="column" rowGap={1} marginTop={i > 0 ? 1 : 0}>
-                <Box key={`top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
-                  <Box key={`label-box-${i}`} width={labelWidth} flexShrink={0}>
-                    <Text key={`label-${i}`} bold>
-                      {labelText(p)}
-                    </Text>
-                  </Box>
-                  <Box key={`question-box-${i}`} flexGrow={1} flexShrink={1}>
-                    <Text key={`question-${i}`}>{p.text}</Text>
-                  </Box>
-                </Box>
-                <Box
-                  key={`options-${i}`}
-                  flexDirection="row"
-                  alignItems="center"
-                  flexWrap="wrap"
-                  columnGap={1}
-                  marginLeft={labelWidth + 1}
-                >
-                  {p.options.map((o, k) => (
-                    <Button
-                      key={`option-${i}-${k}`}
-                      label={o.label}
-                      variant={k === 0 ? 'primary' : 'secondary'}
-                      onPress={() => pickOption($, i, o)}
-                    />
-                  ))}
-                  {Input && (
-                    <Box key={`field-${i}`} flexGrow={1} minWidth={20} width={fieldWidth(p.options.map(o => o.label))}>
-                      <Input
-                        key={`remark-${i}`}
-                        placeholder={t('answerField')}
-                        value={rem[i] ?? ''}
-                        submitLabel={t('send')}
-                        onInput={(text: string) => void setRemark(i, text)}
-                        onSubmit={(text: string) => void keepAndSend(i, text)}
-                      />
-                    </Box>
-                  )}
-                </Box>
-                {showFull(i) && (
-                  <Box key={`full-${i}`} marginLeft={labelWidth + 1}>
-                    <Text key={`full-remark-${i}`} dimColor strikethrough={isStale(p)}>
-                      {stored[i]}
-                    </Text>
-                  </Box>
-                )}
-              </Box>
-            ) : (
-              decisionRow(v, p, i)
-            ),
-          )}
-          <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
-            <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
-            {hasDecisions && <Button key="agree-all" label={agreeLabel} onPress={() => send($, all, true)} />}
-            <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
-          </Box>
-        </Box>
-      </Box>
-    )
+    const v = await rowView($, table, { surface: e.surface, rows: list, prefix: '', columns: e.props.bodyColumns })
+    return (await read($, collapsed)) ? collapsedBar($, v, e.props.bodyColumns) : expandedBar($, v)
   })
 }
