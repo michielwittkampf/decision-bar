@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.7 — 2026-10-24
+
+- What Claude puts in the bar reaches the messages sent as the user only as one plain line:
+  labels and proposals lose line breaks and invisible characters and are cut to a limited length,
+  and a label cannot start with `/`, `!`, `#` or `@`.
+- Translations of the bar's texts only fill in what is still missing, each one short line; agree
+  and disagree must differ, and the shape of an answer line is no longer translated. A language
+  code that is not one is ignored, and a key such as `constructor` no longer breaks the call.
+- A proposal Claude changes also drops the remark written for the old text.
+- Only this mod's own tool is taken for it, not another server's tool whose name ends the same.
+- When setting up the decisions fails, the tool result says why. Dead code removed; the tool and
+  the chat box share one parser for proposals.
+- Ready for Anthropic's plugin directory: icon, links and keywords in `plugin.json`, and the README
+  says what the mod does, with notes for reviewers.
+
 ## 1.2.6 — 2026-10-19
 
 - Where the user cannot see the bar, Claude asks in the chat. The tool result says "Not visible"

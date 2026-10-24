@@ -72,18 +72,36 @@ Everything stays on your machine: the mod makes no network requests and reads no
   the bar, and, for a new chat language, which of the bar's texts to translate. Every other tool
   call passes through unchanged. Of those, it only reads the question and answer buttons of the
   desktop app's next-step box, to show that question in the bar as well.
-- **What it sends as you.** Only when you click Send, Send all, Agree to all or an answer button
-  does the mod submit a message in your name (`$.prompt.submit`), and it holds nothing but your
-  answers: a line per decision, `<label> <agree|disagree>: <proposal>` or
-  `<label> (no decision yet)`, with your remark on its own line below; for a question, the text of
-  the button you picked, with your remark. Label and proposal are the ones Claude put in the bar;
-  agree, disagree and remark follow the chat language.
+- **What it sends as you.** Only when you click Send, Send all, Agree to all or an answer button,
+  or press Enter in a remark field, does the mod submit a message in your name
+  (`$.prompt.submit`), to the same conversation. It holds your answers and what they answer: a
+  line per decision, `<label> <agree|disagree>: <proposal>` or `<label> (no decision yet)`, with
+  your remark on its own line below; for a question, the text of the button you picked, with your
+  remark. Label and proposal are the ones Claude put in the bar, each cut to one plain line of
+  limited length, without invisible characters, and a label cannot start with `/`, `!`, `#` or
+  `@`. Agree, disagree and remark follow the chat language; the line shape itself is fixed.
 - **Your own prompts** (`prompt.submit`, `prompt.edit`) are only read to keep a remark you were
   typing, and to take a question off the bar when you typed one of its answers yourself.
 - **The `/decisions` command** (`command.run`) brings the decisions you hid last back into the bar.
-- **What it keeps.** Decisions, choices and remarks live in the session's state. The bar's texts
-  in each language Claude translated them into are kept in the mod's own store, so a language is
-  translated once.
+- **What it keeps.** Decisions, choices and remarks live in the session's state; a proposal Claude
+  changes starts again without its choice and remark. The bar's texts in each language Claude
+  translated them into are kept in the mod's own store, so a language is translated once. A
+  translation only fills in what is still missing, one short line per text, and agree and
+  disagree must differ.
+
+### Notes for reviewers
+
+Two findings of the plugin directory's scan, and why they are what they are:
+
+- **"Mod can read the conversation and submit a prompt."** Submitting the answers is the mod's
+  purpose. Nothing reaches the message except the label and proposal Claude put in the bar, the
+  bar's own texts and what you typed, and only on your click or Enter; no hook submits. See
+  [What the mod does](#what-the-mod-does).
+- **"Uses a credential from the user's machine."** A false positive: the mod reads no environment,
+  files or credentials and makes no network requests. The scanner took `set` (as in
+  `$.store.set(…)`, `new Set(…)` and a variable named `set`) for the shell builtin that prints the
+  environment, and a test label built as `` `Decision${i + 1}` `` for a command assembled at run
+  time.
 
 ## What would make it better
 

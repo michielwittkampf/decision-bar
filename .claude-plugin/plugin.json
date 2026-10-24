@@ -1,6 +1,6 @@
 {
   "name": "decision-bar",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "A bar above the prompt with the decisions Claude proposes: agree or disagree, add a remark, send; its texts follow the chat language",
   "types": "./types/index.d.ts",
   "author": {

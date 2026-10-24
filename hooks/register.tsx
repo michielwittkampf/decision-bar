@@ -6,6 +6,10 @@ import type { Decision, LastHidden, Option, Proposal } from '../types'
 const TOOL = 'decisions'
 const TOOL_FULL = 'mcp__decision-bar__decisions'
 const COMMAND = 'decisions'
+// The engine may report the tool with a prefix, but the server part must be exactly decision-bar,
+// so a tool of another server whose name merely ends the same is not taken for this one.
+const OUR_TOOL = new RegExp(`(?:^|_)decision-bar__${TOOL}$`)
+const isOurTool = (name: string) => name === TOOL_FULL || OUR_TOOL.test(name)
 
 const proposals = atom({ plugin: 'decision-bar', key: 'proposals' } as const, [] as Proposal[])
 // Per proposal, at the same index: agree, disagree, or nothing yet (null, the default).
@@ -79,20 +83,37 @@ const currentTranslator = async ($: EngineInterface) => translator(await read($,
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',')
 
-// "nl-BE", "NL" and "nl_nl" are all "nl".
-const languageCode = (input: unknown) =>
-  typeof input === 'string' && input.trim() !== '' ? input.trim().toLowerCase().split(/[-_]/)[0]! : undefined
+// "nl-BE", "NL" and "nl_nl" are all "nl"; anything that is not a language code is ignored.
+const languageCode = (input: unknown) => {
+  const code = typeof input === 'string' ? input.trim().toLowerCase().split(/[-_]/)[0]! : ''
+  return /^[a-z]{2,3}$/.test(code) ? code : undefined
+}
 
-// A translation from Claude: only known keys with a text and the same {placeholders}.
+// Text from Claude goes into the bar and, through the message texts, into what is sent as the
+// user, so it may hold no line breaks or invisible characters: those could make one answer look
+// like two, or carry text the user cannot see.
+const UNSAFE = /[\p{Cc}\p{Cf}\u2028\u2029]/u
+const MAX_TEXT = 120
+// Language-neutral, so not translated: the shape of an answer stays fixed.
+const FIXED: readonly string[] = ['messageDecision']
+const isTextKey = (k: string): k is TextKey => Object.prototype.hasOwnProperty.call(EN, k)
+
+// A translation from Claude: only known keys with one short line of text and the same {placeholders}.
 const checkTranslation = (input: unknown) => {
   const accepted: Record<string, string> = {}
   const rejected: string[] = []
   if (input && typeof input === 'object') {
     for (const [k, v] of Object.entries(input)) {
-      if (!(k in EN)) {
+      if (!isTextKey(k) || FIXED.includes(k)) {
         continue
       }
-      if (typeof v === 'string' && v.trim() !== '' && placeholders(v) === placeholders(EN[k as TextKey])) {
+      if (
+        typeof v === 'string' &&
+        v.trim() !== '' &&
+        v.length <= MAX_TEXT &&
+        !UNSAFE.test(v) &&
+        placeholders(v) === placeholders(EN[k])
+      ) {
         accepted[k] = v
       } else {
         rejected.push(k)
@@ -267,15 +288,28 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
   return r ? `${core}\n${INDENT}${t('messageRemark', { remark: r })}` : core
 }
 
+// Label and proposal lead what is sent as the user, so each is one plain line of limited length:
+// line breaks and tabs become spaces, invisible characters go (see UNSAFE), and a label cannot
+// start like a command or a file mention.
+const MAX_LABEL = 40
+const MAX_PROPOSAL = 400
+const oneLine = (text: string, max: number) => {
+  const flat = text
+    .replace(/[\p{Cc}\u2028\u2029\s]+/gu, ' ')
+    .replace(/\p{Cf}/gu, '')
+    .trim()
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat
+}
+const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!#@\s]+/, '')
+
 // The `proposals` argument of a tool call, as Claude sent it: entries without a label are left out,
 // and a proposal without text shows its label.
 const parseProposals = (input: unknown): Proposal[] =>
   (Array.isArray(input) ? input : [])
-    .filter(
-      (p): p is { label: string; text: string } =>
-        typeof p?.label === 'string' && typeof p?.text === 'string' && p.label.trim() !== '',
-    )
-    .map(p => ({ label: p.label.trim(), text: p.text.trim() || p.label.trim() }))
+    .filter((p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string')
+    .map(p => ({ label: cleanLabel(p.label), text: oneLine(p.text, MAX_PROPOSAL) }))
+    .filter(p => p.label !== '')
+    .map(p => ({ label: p.label, text: p.text || p.label }))
 
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
@@ -420,16 +454,17 @@ const questionFromWrapUp = (e: object): Proposal | null => {
   const options = actions
     .filter(a => a && typeof a === 'object' && !('action' in a && a.action))
     .map(a => a as { label?: unknown; message?: unknown })
-    .filter(a => typeof a.label === 'string' && a.label.trim() !== '')
-    .map(a => ({
-      label: (a.label as string).trim(),
-      text: typeof a.message === 'string' && a.message.trim() ? a.message.trim() : (a.label as string).trim(),
-    }))
-  return options.length > 0 ? { label: 'Question', text: ask.trim(), options } : null
+    .filter(a => typeof a.label === 'string' && oneLine(a.label, MAX_LABEL) !== '')
+    .map(a => {
+      const label = oneLine(a.label as string, MAX_LABEL)
+      const message = typeof a.message === 'string' ? oneLine(a.message, MAX_PROPOSAL) : ''
+      return { label, text: message || label }
+    })
+  return options.length > 0 ? { label: 'Question', text: oneLine(ask, MAX_PROPOSAL), options } : null
 }
 
-// The language of a call: sets the bar's texts, keeps a translation that came with it alongside
-// the earlier ones, and asks Claude for what is still missing. Returns the tool result sentence.
+// The language of a call: sets the bar's texts, adds what a translation that came with it still
+// lacked, and asks Claude for what is missing. Returns the tool result sentence.
 const setLanguage = async ($: EngineInterface, code: string | undefined, translation: unknown) => {
   if (!code) {
     return ''
@@ -440,16 +475,24 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
   }
   const stored = checkTranslation(await $.store.get(storeKey(code))).accepted
   const { accepted, rejected } = checkTranslation(translation)
-  const merged = { ...stored, ...accepted }
-  if (Object.keys(accepted).length > 0) {
+  // Only what is still missing is added: a later call cannot change texts already in use.
+  const merged: Record<string, string> = { ...accepted, ...stored }
+  // Agree and disagree must read differently, or an answer cannot be told apart.
+  const t = translator(merged)
+  if (t('agree').trim().toLowerCase() === t('disagree').trim().toLowerCase()) {
+    delete merged.agree
+    delete merged.disagree
+    rejected.push('agree', 'disagree')
+  }
+  if (JSON.stringify(merged) !== JSON.stringify(stored)) {
     await $.store.set(storeKey(code), merged)
   }
   await update($, texts, () => merged)
 
-  const missing = (Object.keys(EN) as TextKey[]).filter(k => !(k in merged))
+  const missing = (Object.keys(EN) as TextKey[]).filter(k => !(k in merged) && !FIXED.includes(k))
   return [
     rejected.length > 0
-      ? `Not used from translation (empty, or other {placeholders} than asked): ${rejected.join(', ')}.`
+      ? `Not used from translation (empty, longer than ${MAX_TEXT} characters, more than one line, other {placeholders} than asked, or agree and disagree the same): ${rejected.join(', ')}.`
       : '',
     missing.length > 0
       ? `The bar shows English where it has no "${code}" texts yet. Call ${TOOL_FULL} again now with language "${code}" and translation: these texts translated into that language, same keys, {placeholders} and symbols unchanged (no proposals needed): ${JSON.stringify(Object.fromEntries(missing.map(k => [k, EN[k]])))}`
@@ -695,6 +738,7 @@ export const register: Register = on => {
     const composed = await next(e)
 
     return {
+      ...composed,
       sections: [...composed.sections, { id: 'decision-bar:instructions', text: INSTRUCTIONS, scope: 'session' }],
     }
   })
@@ -718,7 +762,7 @@ export const register: Register = on => {
       return next(e)
     }
 
-    if (!(e.tool === TOOL_FULL || e.tool.endsWith(`decision-bar__${TOOL}`))) {
+    if (!isOurTool(e.tool)) {
       return next(e)
     }
 
@@ -731,7 +775,7 @@ export const register: Register = on => {
     } = e as { proposals?: unknown; remove?: unknown; language?: unknown; translation?: unknown }
     const incoming = parseProposals(proposalsInput)
     const toRemove = new Set(
-      (Array.isArray(removeInput) ? removeInput : []).filter((l): l is string => typeof l === 'string').map(l => l.trim()),
+      (Array.isArray(removeInput) ? removeInput : []).filter((l): l is string => typeof l === 'string').map(cleanLabel),
     )
 
     try {
@@ -747,7 +791,8 @@ export const register: Register = on => {
       const admitted = incoming.filter(p => !hidden.includes(p.label))
 
       // Existing rows keep their choice and remark; an updated proposal (other text) starts again
-      // without a decision. New labels are added, before a mirrored question.
+      // without either, so a remark written for the old text does not go out with the new one. New
+      // labels are added, before a mirrored question.
       type Row = { p: Proposal; d: Decision; r: string }
       const before: Row[] = list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' }))
       // `remove` takes out rows that were in the bar; a label proposed in this same call stays.
@@ -761,6 +806,7 @@ export const register: Register = on => {
           if (existing.p.text !== p.text) {
             existing.p = p
             existing.d = null
+            existing.r = ''
             updated.push(p.label)
           }
         } else {
@@ -841,8 +887,7 @@ export const register: Register = on => {
   // open, so the box is visible without expanding the group. The terminal honours this; the
   // desktop app folds groups its own way, hence the instruction to call the tool on its own.
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
-    const isOurs = (tool: string) => tool === TOOL_FULL || tool.endsWith(`decision-bar__${TOOL}`)
-    if (e.props.isExpanded || !e.props.calls.some(c => isOurs(c.tool))) {
+    if (e.props.isExpanded || !e.props.calls.some(c => isOurTool(c.tool))) {
       return next(e)
     }
     return next({ ...e, props: { ...e.props, isExpanded: true } })
@@ -852,7 +897,7 @@ export const register: Register = on => {
   // the bar's rows and sharing their state, so you can decide in context and scroll back later. A
   // decision that left the bar shows its sent answer, or "closed" when the bar no longer knows it.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    if (!(e.props.tool === TOOL_FULL || e.props.tool.endsWith(`decision-bar__${TOOL}`))) {
+    if (!isOurTool(e.props.tool)) {
       return next(e)
     }
     drawnOn.add(e.surface)
