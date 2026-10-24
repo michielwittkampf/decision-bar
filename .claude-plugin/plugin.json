@@ -4,7 +4,12 @@
   "description": "A bar above the prompt with the decisions Claude proposes: agree or disagree, add a remark, send; its texts follow the chat language",
   "types": "./types/index.d.ts",
   "author": {
-    "name": "Michiel Wittkampf"
+    "name": "Michiel Wittkampf",
+    "url": "https://github.com/michielwittkampf"
   },
+  "homepage": "https://github.com/michielwittkampf/decision-bar",
+  "repository": "https://github.com/michielwittkampf/decision-bar",
+  "supportUrl": "https://github.com/michielwittkampf/decision-bar/issues",
+  "keywords": ["decisions", "mod", "workflow", "review", "prompt"],
   "license": "MIT"
 }

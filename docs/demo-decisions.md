@@ -16,7 +16,7 @@ Put these demo decisions in the decision bar (language: en), in this order:
 For the screenshots: agree on Dark mode, disagree on Auth, and the remark "Seven is fine. Be
 gentle." on Decaf.
 
-The same set in Dutch, for the screenshot of the bar in another language (`docs/many.png`):
+The same set in Dutch, for the README screenshot of the bar in another language:
 
 ```
 Zet deze demobeslissingen in de beslissingsbalk (language: nl), in deze volgorde:
