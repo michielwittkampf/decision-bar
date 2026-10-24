@@ -91,9 +91,10 @@ const languageCode = (input: unknown) => {
 
 // Text from Claude goes into the bar and, through the message texts, into what is sent as the
 // user, so it may hold no line breaks or invisible characters: those could make one answer look
-// like two, or carry text the user cannot see.
-const UNSAFE = /[\p{Cc}\p{Cf}\u2028\u2029]/u
-const MAX_TEXT = 120
+// like two, or carry text the user cannot see. Joiners and direction marks (U+200C to U+200F) stay:
+// Persian, Indic scripts, Arabic and Hebrew need them, and so do emoji like a family of three.
+const UNSAFE = /[\p{Cc}\u2028\u2029]|(?![\u200C-\u200F])\p{Cf}/u
+const MAX_TEXT = 200
 // Language-neutral, so not translated: the shape of an answer stays fixed.
 const FIXED: readonly string[] = ['messageDecision']
 const isTextKey = (k: string): k is TextKey => Object.prototype.hasOwnProperty.call(EN, k)
@@ -290,17 +291,17 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
 
 // Label and proposal lead what is sent as the user, so each is one plain line of limited length:
 // line breaks and tabs become spaces, invisible characters go (see UNSAFE), and a label cannot
-// start like a command or a file mention.
+// start like a command, bash mode or a file mention.
 const MAX_LABEL = 40
 const MAX_PROPOSAL = 400
 const oneLine = (text: string, max: number) => {
   const flat = text
     .replace(/[\p{Cc}\u2028\u2029\s]+/gu, ' ')
-    .replace(/\p{Cf}/gu, '')
+    .replace(/(?![\u200C-\u200F])\p{Cf}/gu, '')
     .trim()
   return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat
 }
-const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!#@\s]+/, '')
+const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!@\s]+/, '')
 
 // The `proposals` argument of a tool call, as Claude sent it: entries without a label are left out,
 // and a proposal without text shows its label.

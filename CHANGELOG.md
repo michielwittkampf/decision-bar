@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.8 — 2026-10-24
+
+- Joiners and direction marks (U+200C to U+200F) are kept in labels, proposals and translations:
+  1.2.7 removed them, which broke Persian words, Indic scripts, right-to-left text and emoji such
+  as a family. Other invisible characters still go.
+- A label may start with `#` again (an issue number, say); `/`, `!` and `@` still may not.
+- A translated text may be up to 200 characters, room for longer languages; it is still one line.
+
 ## 1.2.7 — 2026-10-24
 
 - What Claude puts in the bar reaches the messages sent as the user only as one plain line:

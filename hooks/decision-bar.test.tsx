@@ -1005,3 +1005,37 @@ test("another server's tool whose name ends the same is not taken for the bar's 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
 })
+
+test('joiners and direction marks stay: Persian, emoji and a label starting with #', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({
+    tool: TOOL,
+    ...EN,
+    proposals: [
+      { label: '#12', text: 'می‌خواهم ‏بله‏' },
+      { label: 'Family', text: 'add 👨‍👩‍👧 as an icon' },
+    ],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'agree-0' })
+  await ui.press({ key: 'agree-1' })
+  await ui.press({ key: 'send-all' })
+  expect(sent.at(-1)).toBe('#12 agree: می‌خواهم ‏بله‏\n\nFamily agree: add 👨‍👩‍👧 as an icon')
+})
+
+test('a translation may use joiners and be longer, but not turn text around', async ($, on) => {
+  setup(on)
+
+  const long = 'x'.repeat(150)
+  const res = await $.tool.call({
+    tool: TOOL,
+    language: 'fa',
+    proposals: PROPOSALS,
+    translation: { hide: 'پنهان‌سازی', heading: long, restore: 'back‮ward' },
+  })
+  expect(String(res.result)).toContain('Not used from translation')
+  expect(String(res.result)).toMatch(/: restore\./)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ key: 'hide' }))?.text).toContain('پنهان‌سازی')
+})

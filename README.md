@@ -78,8 +78,8 @@ Everything stays on your machine: the mod makes no network requests and reads no
   line per decision, `<label> <agree|disagree>: <proposal>` or `<label> (no decision yet)`, with
   your remark on its own line below; for a question, the text of the button you picked, with your
   remark. Label and proposal are the ones Claude put in the bar, each cut to one plain line of
-  limited length, without invisible characters, and a label cannot start with `/`, `!`, `#` or
-  `@`. Agree, disagree and remark follow the chat language; the line shape itself is fixed.
+  limited length, without invisible characters (joiners and direction marks that scripts and
+  emoji need stay), and a label cannot start with `/`, `!` or `@`. Agree, disagree and remark follow the chat language; the line shape itself is fixed.
 - **Your own prompts** (`prompt.submit`, `prompt.edit`) are only read to keep a remark you were
   typing, and to take a question off the bar when you typed one of its answers yourself.
 - **The `/decisions` command** (`command.run`) brings the decisions you hid last back into the bar.
