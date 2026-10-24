@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.9 — 2026-10-24
+
+- Internal: the bar's state is one list of rows instead of three lists kept in step, the tool
+  call's merge is a separate tested function, and the bar's drawing is split into named parts.
+  No change in behaviour. Decisions open in the bar when updating from an earlier version are
+  dropped once.
+- Each place the plugin directory's scan points at says why in the code; the README's notes for
+  reviewers explain the two findings that hold a version for review.
+- PRIVACY.md: what the mod sends (only your answers, into the same conversation), reads and keeps.
+  The listing links to it, and to documentation, support and the licence.
+
 ## 1.2.8 — 2026-10-24
 
 - Joiners and direction marks (U+200C to U+200F) are kept in labels, proposals and translations:
