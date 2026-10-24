@@ -83,7 +83,16 @@ const currentTranslator = async ($: EngineInterface) => translator(await read($,
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',')
 
-// "nl-BE", "NL" and "nl_nl" are all "nl"; anything that is not a language code is ignored.
+// Why the checks below. What Claude puts in the bar (labels, proposals, translations of the bar's
+// texts) leaves as a message from the user when they press Send. A user message carries the user's
+// authority: Claude, Claude Code and its permission modes take it as instruction and consent,
+// while text Claude wrote or read is only data. If Claude was steered by text it read (prompt
+// injection), the bar must not turn that into consent the user never saw. So a press means what
+// the row shows: one plain line per answer, nothing hidden, nothing that later changes on its own.
+// The limits are generous for normal use and only bound how much text can travel this way.
+
+// "nl-BE", "NL" and "nl_nl" are all "nl"; anything that is not a language code is ignored, since
+// the code ends up in a key of the mod's store and in the tool result Claude reads back.
 const languageCode = (input: unknown) => {
   const code = typeof input === 'string' ? input.trim().toLowerCase().split(/[-_]/)[0]! : ''
   return /^[a-z]{2,3}$/.test(code) ? code : undefined
@@ -94,9 +103,12 @@ const languageCode = (input: unknown) => {
 // like two, or carry text the user cannot see. Joiners and direction marks (U+200C to U+200F) stay:
 // Persian, Indic scripts, Arabic and Hebrew need them, and so do emoji like a family of three.
 const UNSAFE = /[\p{Cc}\u2028\u2029]|(?![\u200C-\u200F])\p{Cf}/u
+// Room for the longest text in a long language; anything beyond that is not a translation.
 const MAX_TEXT = 200
-// Language-neutral, so not translated: the shape of an answer stays fixed.
+// Not translated: it is language-neutral, and a translation of it would be the one place where
+// text from Claude is added to every answer line the user sends.
 const FIXED: readonly string[] = ['messageDecision']
+// An own key of EN only: `'constructor' in EN` is true too, and such a key broke the call.
 const isTextKey = (k: string): k is TextKey => Object.prototype.hasOwnProperty.call(EN, k)
 
 // A translation from Claude: only known keys with one short line of text and the same {placeholders}.
@@ -292,6 +304,8 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
 // Label and proposal lead what is sent as the user, so each is one plain line of limited length:
 // line breaks and tabs become spaces, invisible characters go (see UNSAFE), and a label cannot
 // start like a command, bash mode or a file mention.
+// A label is a short name (C13, Order); a proposal is one sentence. Longer is cut with "…", which
+// the row shows too, so what is sent never holds more than the user saw.
 const MAX_LABEL = 40
 const MAX_PROPOSAL = 400
 const oneLine = (text: string, max: number) => {
