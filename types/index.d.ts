@@ -3,15 +3,15 @@ export type Option = { label: string; text: string }
 // box, with that box's answer buttons.
 export type Proposal = { label: string; text: string; options?: Option[] }
 export type Decision = 'agree' | 'disagree' | null
+// A row of the bar: the proposal with its choice and remark.
+export type Row = { p: Proposal; d: Decision; r: string }
 // The last hidden set: each row with its choice and remark.
-export type LastHidden = { rows: { p: Proposal; d: Decision; r: string }[]; show: boolean }
+export type LastHidden = { rows: Row[]; show: boolean }
 
 declare module 'claude-code' {
   interface PluginState {
     'decision-bar': {
-      proposals: Proposal[]
-      decisions: Decision[]
-      remarks: string[]
+      rows: Row[]
       sentRemarks: Record<string, string>
       hiddenLabels: string[]
       lastHidden: LastHidden | null

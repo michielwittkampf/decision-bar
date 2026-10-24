@@ -164,7 +164,7 @@ proposed as a built-in feature in
 The `plugin-authoring` skill in Claude Code has the mod API for your version. Things to know:
 
 - Typed text lives in `drafts`, not in `$.state`, and is committed by `commitDrafts` on any other
-  action; reading goes through `currentRemarks`. Keep it that way. Writing `$.state` on every
+  action; reading goes through `withDrafts`. Keep it that way. Writing `$.state` on every
   keystroke redraws the field: the cursor stays where it was, but the desktop app scrolls the
   field back to the start of its text, so a remark wider than the field is typed out of sight. A
   test with short text does not show this.

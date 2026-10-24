@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Decision, LastHidden, Option, Proposal } from '../types'
+import type { Decision, LastHidden, Option, Proposal, Row } from '../types'
 
 const TOOL = 'decisions'
 const TOOL_FULL = 'mcp__decision-bar__decisions'
@@ -11,10 +11,9 @@ const COMMAND = 'decisions'
 const OUR_TOOL = new RegExp(`(?:^|_)decision-bar__${TOOL}$`)
 const isOurTool = (name: string) => name === TOOL_FULL || OUR_TOOL.test(name)
 
-const proposals = atom({ plugin: 'decision-bar', key: 'proposals' } as const, [] as Proposal[])
-// Per proposal, at the same index: agree, disagree, or nothing yet (null, the default).
-const decisions = atom({ plugin: 'decision-bar', key: 'decisions' } as const, [] as Decision[])
-const remarks = atom({ plugin: 'decision-bar', key: 'remarks' } as const, [] as string[])
+// The bar's rows, in order: each proposal with its choice (agree, disagree, or nothing yet: null)
+// and its committed remark. One atom, so a proposal and its choice and remark cannot drift apart.
+const rows = atom({ plugin: 'decision-bar', key: 'rows' } as const, [] as Row[])
 // The last remark sent per open decision (key: `rowKey(p)`): a confirmation in the row, and the
 // same remark is not sent twice.
 const sentRemarks = atom({ plugin: 'decision-bar', key: 'sentRemarks' } as const, {} as Record<string, string>)
@@ -160,7 +159,7 @@ const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
 // What is typed in a remark field, per proposal (`rowKey`). Deliberately not in `$.state`: every
 // write there redraws the bar, and a redrawn field is handed its text again (`value`), which made
 // the field flicker on every keystroke and jump back to the start of the text. Committed to
-// `remarks` on any other action (`commitDrafts`); a reload of the mod loses only uncommitted typing.
+// `rows` on any other action (`commitDrafts`); a reload of the mod loses only uncommitted typing.
 let drafts = new Map<string, string>()
 // The field (`key`) last typed in: focus moving there is not another action.
 let lastField: string | undefined
@@ -178,15 +177,14 @@ const isVisible = async ($: EngineInterface) => {
 }
 const NOT_VISIBLE =
   'Not visible: this session has not drawn the bar or a decision box (for example a side chat in the desktop app), so the user cannot see them. Ask these decisions in your reply as well, with the same labels, and do not say they are in the bar. They stay in the bar in case it appears; remove them with `remove` once answered.'
-const currentRemarks = (list: Proposal[], stored: string[]) =>
-  list.map((p, i) => drafts.get(rowKey(p)) ?? stored[i] ?? '')
+// The rows with what is typed but not yet committed as their remark.
+const withDrafts = (list: Row[]): Row[] => list.map(row => ({ ...row, r: drafts.get(rowKey(row.p)) ?? row.r }))
 const commitDrafts = async ($: EngineInterface) => {
   lastField = undefined
   if (drafts.size > 0) {
-    const [list, stored] = await Promise.all([read($, proposals), read($, remarks)])
-    const now = currentRemarks(list, stored)
+    const now = withDrafts(await read($, rows))
     drafts.clear()
-    await update($, remarks, () => now)
+    await update($, rows, () => now)
   }
   if ((await read($, editing)).length > 0) {
     await update($, editing, () => [])
@@ -242,23 +240,23 @@ const breakLongWords = (text: string, width: number, soft: boolean) =>
 
 // Decided is agree / disagree, or a typed answer to a question; the rest is open. Remarks count
 // only on decisions: on a question the text is the answer itself.
-const tally = (list: Proposal[], dec: Decision[], rem: string[]) => {
-  const decided = list.filter((p, i) => (p.options ? !!rem[i]?.trim() : (dec[i] ?? null) !== null)).length
-  const withRemark = list.filter((p, i) => !p.options && !!rem[i]?.trim()).length
+const tally = (list: Row[]) => {
+  const decided = list.filter(row => (row.p.options ? !!row.r.trim() : row.d !== null)).length
+  const withRemark = list.filter(row => !row.p.options && !!row.r.trim()).length
   return { open: list.length - decided, decided, withRemark }
 }
 
 // Expanded, in the heading: "4 open · 3 chosen"; a count of zero is left out.
-const headingTally = (t: Translate, list: Proposal[], dec: Decision[], rem: string[]) => {
-  const { open, decided } = tally(list, dec, rem)
+const headingTally = (t: Translate, list: Row[]) => {
+  const { open, decided } = tally(list)
   return [open > 0 ? t('open', { n: open }) : '', decided > 0 ? t('chosen', { n: decided }) : '']
     .filter(Boolean)
     .join(SEPARATOR)
 }
 
 // Collapsed and narrow: "1 open and 2 decided · 2 ✎"; a count of zero is left out.
-const miniSummary = (t: Translate, list: Proposal[], dec: Decision[], rem: string[]) => {
-  const { open, decided, withRemark } = tally(list, dec, rem)
+const miniSummary = (t: Translate, list: Row[]) => {
+  const { open, decided, withRemark } = tally(list)
   const parts = [open > 0 ? t('open', { n: open }) : '', decided > 0 ? t('decided', { n: decided }) : ''].filter(
     Boolean,
   )
@@ -329,13 +327,10 @@ const parseProposals = (input: unknown): Proposal[] =>
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
   await commitDrafts($)
-  const [list, dec, rem] = await Promise.all([read($, proposals), read($, decisions), read($, remarks)])
-  const labels = list.filter(p => !p.options).map(p => p.label)
+  const list = await read($, rows)
+  const labels = list.filter(row => !row.p.options).map(row => row.p.label)
   await update($, hiddenLabels, old => [...new Set([...old, ...labels])])
-  await update($, lastHidden, () => ({
-    rows: list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' })),
-    show: true,
-  }))
+  await update($, lastHidden, () => ({ rows: list, show: true }))
   await clear($)
 }
 
@@ -347,8 +342,7 @@ const restore = async ($: EngineInterface): Promise<number> => {
   if (!set || set.rows.length === 0) {
     return 0
   }
-  const [list, dec, rem] = await Promise.all([read($, proposals), read($, decisions), read($, remarks)])
-  const now = list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' }))
+  const now = await read($, rows)
   const back = set.rows.filter(
     row => !now.some(n => (row.p.options ? n.p.options && n.p.text === row.p.text : !n.p.options && n.p.label === row.p.label)),
   )
@@ -359,18 +353,14 @@ const restore = async ($: EngineInterface): Promise<number> => {
   ]
   const labels = set.rows.map(row => row.p.label)
   await update($, hiddenLabels, old => old.filter(l => !labels.includes(l)))
-  await update($, proposals, () => merged.map(row => row.p))
-  await update($, decisions, () => merged.map(row => row.d))
-  await update($, remarks, () => merged.map(row => row.r))
+  await update($, rows, () => merged)
   await update($, lastHidden, () => null)
   return back.length
 }
 
 const clear = async ($: EngineInterface) => {
   drafts.clear()
-  await update($, proposals, () => [])
-  await update($, decisions, () => [])
-  await update($, remarks, () => [])
+  await update($, rows, () => [])
   await update($, sentRemarks, () => ({}))
 }
 
@@ -378,39 +368,36 @@ const clear = async ($: EngineInterface) => {
 // remark stays open, without that remark.
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
   await commitDrafts($)
-  const list = await read($, proposals)
-  const dec = agreeToAll ? list.map((p): Decision => (p.options ? null : 'agree')) : await read($, decisions)
-  const rem = await read($, remarks)
+  const stored = await read($, rows)
+  const list = agreeToAll ? stored.map((row): Row => ({ ...row, d: row.p.options ? null : 'agree' })) : stored
   const sentBefore = await read($, sentRemarks)
   const t = await currentTranslator($)
   // Only a remark, and exactly that one was sent already: not again.
   const alreadySent = (i: number) => {
-    const p = list[i]
-    const r = rem[i]?.trim() ?? ''
-    return !!p && !p.options && (dec[i] ?? null) === null && r !== '' && sentBefore[rowKey(p)] === r
+    const row = list[i]
+    const r = row?.r.trim() ?? ''
+    return !!row && !row.p.options && row.d === null && r !== '' && sentBefore[rowKey(row.p)] === r
   }
   const lines = indexes
     .filter(i => !alreadySent(i))
-    .map(i => (list[i] ? messageLine(t, list[i], dec[i] ?? null, rem[i]) : ''))
+    .map(i => (list[i] ? messageLine(t, list[i].p, list[i].d, list[i].r) : ''))
     .filter(l => l !== '')
   if (lines.length === 0) {
-    await update($, remarks, old => old.map((r, i) => (indexes.includes(i) ? '' : r)))
+    await update($, rows, old => old.map((row, i) => (indexes.includes(i) ? { ...row, r: '' } : row)))
     return false
   }
 
   const sent = new Set(indexes)
-  const answered = (i: number) => (dec[i] ?? null) !== null || (list[i]?.options !== undefined && !!rem[i]?.trim())
-  const stays = (i: number) => !sent.has(i) || !answered(i)
+  const answered = (row: Row) => row.d !== null || (row.p.options !== undefined && !!row.r.trim())
+  const stays = (i: number) => !sent.has(i) || !answered(list[i]!)
   const keep = list.map((_, i) => i).filter(stays)
-  await update($, proposals, () => keep.map(i => list[i]!))
-  await update($, decisions, () => keep.map(i => dec[i] ?? null))
-  await update($, remarks, () => keep.map(i => (sent.has(i) ? '' : (rem[i] ?? ''))))
+  await update($, rows, () => keep.map(i => (sent.has(i) ? { ...list[i]!, r: '' } : list[i]!)))
   await update($, sentRemarks, old => {
     const remembered = { ...old }
     for (const i of keep) {
-      const r = rem[i]?.trim() ?? ''
+      const r = list[i]!.r.trim()
       if (sent.has(i) && r !== '') {
-        remembered[rowKey(list[i]!)] = r
+        remembered[rowKey(list[i]!.p)] = r
       }
     }
     return remembered
@@ -419,10 +406,9 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   await update($, sentDecisions, old => {
     const recorded: Record<string, 'agree' | 'disagree'> = { ...(old as Record<string, 'agree' | 'disagree'>) }
     for (const i of indexes) {
-      const p = list[i]
-      const d = dec[i] ?? null
-      if (p && !p.options && d !== null) {
-        recorded[rowKey(p)] = d
+      const row = list[i]
+      if (row && !row.p.options && row.d !== null) {
+        recorded[rowKey(row.p)] = row.d
       }
     }
     return recorded
@@ -430,10 +416,10 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   await update($, sentAnswerRemarks, old => {
     const recorded: Record<string, string> = { ...(old as Record<string, string>) }
     for (const i of indexes) {
-      const p = list[i]
-      const r = rem[i]?.trim() ?? ''
-      if (p && !p.options && (dec[i] ?? null) !== null && r !== '') {
-        recorded[rowKey(p)] = r
+      const row = list[i]
+      const r = row?.r.trim() ?? ''
+      if (row && !row.p.options && row.d !== null && r !== '') {
+        recorded[rowKey(row.p)] = r
       }
     }
     return recorded
@@ -447,12 +433,9 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
 // that question.
 const pickOption = async ($: EngineInterface, i: number, option: Option) => {
   await commitDrafts($)
-  const rem = await read($, remarks)
-  const r = rem[i]?.trim() ?? ''
+  const r = (await read($, rows))[i]?.r.trim() ?? ''
   const t = await currentTranslator($)
-  await update($, proposals, old => old.filter((_, j) => j !== i))
-  await update($, decisions, old => old.filter((_, j) => j !== i))
-  await update($, remarks, old => old.filter((_, j) => j !== i))
+  await update($, rows, old => old.filter((_, j) => j !== i))
   await $.prompt.submit({
     text: (r ? `${option.text}\n${INDENT}${t('messageRemark', { remark: r })}` : option.text) + TRAILER,
     asUser: true,
@@ -531,18 +514,18 @@ const rowView = async (
   $: EngineInterface,
   els: Elements,
   surface: string,
-  list: Proposal[],
+  list: Row[],
   prefix: string,
   columns: number,
-  shown: Proposal[] = list,
+  shown: Proposal[] = list.map(row => row.p),
   remarkAsText = false,
 ) => {
   const { Box, Button, Text } = els
   const Input = remarkAsText ? undefined : els.Input
   const t = translator(await read($, texts))
-  const dec = await read($, decisions)
-  const stored = await read($, remarks)
-  const rem = currentRemarks(list, stored)
+  const dec = list.map(row => row.d)
+  const stored = list.map(row => row.r)
+  const rem = withDrafts(list).map(row => row.r)
   const sent = await read($, sentRemarks)
   const beingEdited = await read($, editing)
   // The line shows the last committed text; while the field is edited it is struck through:
@@ -553,7 +536,7 @@ const rowView = async (
   // Typing does not redraw (see `drafts`); only clearing "✓ remark sent" or striking through the
   // full remark does, once.
   const setRemark = async (i: number, text: string) => {
-    const p = list[i]
+    const p = list[i]?.p
     if (!p) {
       return
     }
@@ -583,17 +566,13 @@ const rowView = async (
     }
     const done = await send($, [i])
     if (!done) {
-      $.ui.toast(list[i]?.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
+      $.ui.toast(list[i]?.p.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
     }
   }
   // Pressing the chosen state again sets it back to "no decision".
   const choose = (i: number, decision: Exclude<Decision, null>) =>
     commitDrafts($).then(() =>
-      update($, decisions, old => {
-        const choices = list.map((_, j) => old[j] ?? null)
-        choices[i] = choices[i] === decision ? null : decision
-        return choices
-      }),
+      update($, rows, old => old.map((row, j) => (j === i ? { ...row, d: row.d === decision ? null : decision } : row))),
     )
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
@@ -765,14 +744,9 @@ export const register: Register = on => {
       const question = questionFromWrapUp(e)
       if (question) {
         await commitDrafts($).catch(() => undefined)
-        await Promise.all([read($, proposals), read($, decisions), read($, remarks)])
-          .then(async ([list, dec, rem]) => {
-            const keep = list.map((_, i) => i).filter(i => !list[i]!.options)
-            await update($, proposals, () => [...keep.map(i => list[i]!), question])
-            await update($, decisions, () => [...keep.map(i => dec[i] ?? null), null])
-            await update($, remarks, () => [...keep.map(i => rem[i] ?? ''), ''])
-          })
-          .catch(() => undefined)
+        await update($, rows, old => [...old.filter(row => !row.p.options), { p: question, d: null, r: '' }]).catch(
+          () => undefined,
+        )
       }
       return next(e)
     }
@@ -796,27 +770,22 @@ export const register: Register = on => {
     try {
       await commitDrafts($)
       const languageSentence = await setLanguage($, languageCode(languageInput), translationInput)
-      const [list, dec, rem, hidden] = await Promise.all([
-        read($, proposals),
-        read($, decisions),
-        read($, remarks),
-        read($, hiddenLabels),
-      ])
+      const [before, hidden] = await Promise.all([read($, rows), read($, hiddenLabels)])
       const skipped = incoming.filter(p => hidden.includes(p.label)).map(p => p.label)
       const admitted = incoming.filter(p => !hidden.includes(p.label))
 
       // Existing rows keep their choice and remark; an updated proposal (other text) starts again
       // without either, so a remark written for the old text does not go out with the new one. New
       // labels are added, before a mirrored question.
-      type Row = { p: Proposal; d: Decision; r: string }
-      const before: Row[] = list.map((p, i) => ({ p, d: dec[i] ?? null, r: rem[i] ?? '' }))
       // `remove` takes out rows that were in the bar; a label proposed in this same call stays.
       const removed = before.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
-      const rows = before.filter(row => row.p.options || !toRemove.has(row.p.label))
+      const merged = before
+        .filter(row => row.p.options || !toRemove.has(row.p.label))
+        .map(row => ({ ...row }))
       const updated: string[] = []
       const added: string[] = []
       for (const p of admitted) {
-        const existing = rows.find(row => !row.p.options && row.p.label === p.label)
+        const existing = merged.find(row => !row.p.options && row.p.label === p.label)
         if (existing) {
           if (existing.p.text !== p.text) {
             existing.p = p
@@ -826,17 +795,15 @@ export const register: Register = on => {
           }
         } else {
           added.push(p.label)
-          const at = rows.findIndex(row => row.p.options)
-          rows.splice(at === -1 ? rows.length : at, 0, { p, d: null, r: '' })
+          const at = merged.findIndex(row => row.p.options)
+          merged.splice(at === -1 ? merged.length : at, 0, { p, d: null, r: '' })
         }
       }
-      const decisionRows = rows.filter(row => !row.p.options)
+      const decisionRows = merged.filter(row => !row.p.options)
       // No limit: a decision only leaves the bar when it is sent, hidden or removed.
-      const keep = [...decisionRows, ...rows.filter(row => row.p.options)]
+      const keep = [...decisionRows, ...merged.filter(row => row.p.options)]
 
-      await update($, proposals, () => keep.map(row => row.p))
-      await update($, decisions, () => keep.map(row => row.d))
-      await update($, remarks, () => keep.map(row => row.r))
+      await update($, rows, () => keep)
 
       const sentence = (head: string, labels: string[]) => (labels.length > 0 ? `${head}: ${labels.join(', ')}.` : '')
       const open = keep.filter(row => !row.p.options).map(row => row.p.label)
@@ -882,16 +849,13 @@ export const register: Register = on => {
     await update($, lastHidden, set => (set && set.show ? { ...set, show: false } : set)).catch(() => undefined)
     await commitDrafts($).catch(() => undefined)
     const text = e.text.trim()
-    await read($, proposals)
+    await read($, rows)
       .then(async list => {
-        const answered = list.map((p, i) => (p.options?.some(o => o.text === text) ? i : -1)).filter(i => i >= 0)
+        const answered = list.map((row, i) => (row.p.options?.some(o => o.text === text) ? i : -1)).filter(i => i >= 0)
         if (answered.length === 0) {
           return
         }
-        const stays = (_: unknown, i: number) => !answered.includes(i)
-        await update($, proposals, old => old.filter(stays))
-        await update($, decisions, old => old.filter(stays))
-        await update($, remarks, old => old.filter(stays))
+        await update($, rows, old => old.filter((_, i) => !answered.includes(i)))
       })
       .catch(() => undefined)
 
@@ -922,7 +886,7 @@ export const register: Register = on => {
       return next(e)
     }
     const els = $.ui.resolve(e) as unknown as Elements
-    const list = await read($, proposals)
+    const list = await read($, rows)
     const prefix = `chat-${e.props.tool_use_id}-`
     // Columns 0: the field takes its minimum width, so it stays on the row inside the box. A
     // transcript row takes no keys in the terminal, so there the remark is text, typed in the bar.
@@ -930,11 +894,9 @@ export const register: Register = on => {
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const doneRemarks = await read($, sentAnswerRemarks)
-    const indexOf = (p: Proposal) => list.findIndex(o => !o.options && rowKey(o) === rowKey(p))
+    const indexOf = (p: Proposal) => list.findIndex(row => !row.p.options && rowKey(row.p) === rowKey(p))
     const openIndexes = asked.map(indexOf).filter(i => i >= 0)
-    const openList = openIndexes.map(i => list[i]!)
-    const openDec = openIndexes.map(i => v.dec[i] ?? null)
-    const openRem = openIndexes.map(i => v.rem[i] ?? '')
+    const openRows = withDrafts(openIndexes.map(i => list[i]!))
     const sendBox = async () => {
       if (!(await send($, openIndexes))) {
         $.ui.toast(t('nothingToSendDecision'))
@@ -947,13 +909,13 @@ export const register: Register = on => {
             {t('heading')}
           </Text>
           <Text key={`${prefix}tally`} dimColor>
-            {headingTally(t, openList, openDec, openRem)}
+            {headingTally(t, openRows)}
           </Text>
         </Box>
         {asked.map((p, k) => {
           const i = indexOf(p)
           if (i >= 0) {
-            return decisionRow(v, list[i]!, i)
+            return decisionRow(v, list[i]!.p, i)
           }
           const answer = done[rowKey(p)]
           return (
@@ -996,7 +958,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Asked to draw the band, also while it is empty: the bar can be seen on this surface.
     drawnOn.add(e.surface)
-    const list = await read($, proposals)
+    const list = await read($, rows)
 
     // Also visible while Claude works (a sent message then waits until the turn is done) and while
     // the app holds the spot (`hasSurvey`): otherwise the bar disappears the moment the next-step
@@ -1029,17 +991,17 @@ export const register: Register = on => {
 
     const v = await rowView($, table as Elements, e.surface, list, '', e.props.bodyColumns)
     const { Input, dec, stored, rem, showFull, isStale, setRemark, keepAndSend, roomy, labelWidth, labelText, fieldWidth } = v
-    const hasDecisions = list.some(p => !p.options)
+    const hasDecisions = list.some(row => !row.p.options)
     const all = list.map((_, i) => i)
     // With one row no "all": you would look for what else goes along.
     const sendLabel = t(list.length === 1 ? 'sendOne' : 'sendAll')
-    const agreeLabel = t(list.filter(p => !p.options).length === 1 ? 'agreeOne' : 'agreeAll')
+    const agreeLabel = t(list.filter(row => !row.p.options).length === 1 ? 'agreeOne' : 'agreeAll')
     const hasSomething = all.some(i => (dec[i] ?? null) !== null || rem[i]?.trim())
     const isCollapsed = await read($, collapsed)
 
     // Per row its state: ✓ agree / ✗ disagree / ○ nothing yet, ✎ with a remark.
     const summary = list
-      .map((p, i) => {
+      .map(({ p }, i) => {
         const pen = rem[i]?.trim() ? ' ✎' : ''
         if (p.options) {
           return `${t('question')}${pen}`
@@ -1069,7 +1031,7 @@ export const register: Register = on => {
           <Button key="toggle" label={`${CLOSED} ${t('heading')}`} onPress={toggle} />
           <Box key="summary-box" flexGrow={1} flexShrink={1}>
             <Text key="summary" dimColor>
-              {collapsedLines(summary) > 2 ? miniSummary(t, list, dec, rem) : summary}
+              {collapsedLines(summary) > 2 ? miniSummary(t, withDrafts(list)) : summary}
             </Text>
           </Box>
           {hasSomething && (
@@ -1084,13 +1046,13 @@ export const register: Register = on => {
         <Box key="heading" flexDirection="row" alignItems="center" columnGap={1}>
           <Button key="toggle" label={`${OPENED} ${t('heading')}`} plain onPress={toggle} />
           <Text key="tally" dimColor>
-            {headingTally(t, list, dec, rem)}
+            {headingTally(t, withDrafts(list))}
           </Text>
         </Box>
         {/* Outside the terminal the chevron sits a little to the right because of the button's
             border: the content moves one cell along so it lines up below it. */}
         <Box key="content" flexDirection="column" rowGap={1} marginLeft={roomy ? 1 : 0}>
-          {list.map((p, i) =>
+          {list.map(({ p }, i) =>
             p.options ? (
               // Same columns as the decisions: "Question" in the label column, the question next to
               // it, and the answers below, indented to under the question.
