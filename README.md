@@ -101,9 +101,6 @@ next to each place the scan points at.
   bar's own texts and what you typed, and only on your click or Enter; no hook submits. What the
   mod reads (`session.surfaces`) only decides whether Claude is told to ask in its reply as well,
   and never goes into a message. See [What the mod does](#what-the-mod-does).
-- **"Unrecognized field in plugin.json: `types`."** Claude Code ignores it when loading, but
-  `claude plugin validate` reads it: it points at the type contract of the mod's state
-  (`types/index.d.ts`), which the validator checks the mod against.
 
 ## What would make it better
 

@@ -7,7 +7,7 @@
   No change in behaviour. Decisions open in the bar when updating from an earlier version are
   dropped once.
 - Each place the plugin directory's scan points at says why in the code; the README's notes for
-  reviewers explain the two findings that hold a version for review.
+  reviewers explain the finding that holds a version for review.
 - PRIVACY.md: what the mod sends (only your answers, into the same conversation), reads and keeps.
   The listing links to it, and to documentation, support and the licence.
 
