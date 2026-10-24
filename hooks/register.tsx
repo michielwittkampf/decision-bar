@@ -19,7 +19,7 @@ const rows = atom({ plugin: 'decision-bar', key: 'rows' } as const, [] as Row[])
 const sentRemarks = atom({ plugin: 'decision-bar', key: 'sentRemarks' } as const, {} as Record<string, string>)
 // Labels the user dismissed with Hide: a later call does not bring them back.
 const hiddenLabels = atom({ plugin: 'decision-bar', key: 'hiddenLabels' } as const, [] as string[])
-// The last hidden set, to restore; `show` is the row with the Restore button.
+// The last hidden group, to restore; `show` is the row with the Restore button.
 const lastHidden = atom({ plugin: 'decision-bar', key: 'lastHidden' } as const, null as LastHidden | null)
 const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, false)
 // Proposals (`rowKey`) whose field is being edited: their full-remark line is struck through,
@@ -366,16 +366,16 @@ const hide = async ($: EngineInterface) => {
   await clear($)
 }
 
-// Brings back the last hidden set, with choices and remarks as they were. What was added in the
+// Brings back the last hidden group, with choices and remarks as they were. What was added in the
 // meantime stays; a label that is back already is not added twice.
 const restore = async ($: EngineInterface): Promise<number> => {
   await commitDrafts($)
-  const set = await read($, lastHidden)
-  if (!set || set.rows.length === 0) {
+  const hidden = await read($, lastHidden)
+  if (!hidden || hidden.rows.length === 0) {
     return 0
   }
   const now = await read($, rows)
-  const back = set.rows.filter(
+  const back = hidden.rows.filter(
     row => !now.some(n => (row.p.options ? n.p.options && n.p.text === row.p.text : !n.p.options && n.p.label === row.p.label)),
   )
   const merged = [
@@ -383,7 +383,7 @@ const restore = async ($: EngineInterface): Promise<number> => {
     ...now.filter(row => !row.p.options),
     ...[...back, ...now].filter(row => row.p.options),
   ]
-  const labels = set.rows.map(row => row.p.label)
+  const labels = hidden.rows.map(row => row.p.label)
   await update($, hiddenLabels, old => old.filter(l => !labels.includes(l)))
   await update($, rows, () => merged)
   await update($, lastHidden, () => null)
@@ -677,7 +677,7 @@ const rowTop = (v: RowView, p: Proposal, i: number, kind: 'proposal' | 'question
 }
 
 // The remark field, or for a question the field for an own answer. Enter or its button sends only
-// this row; the rest stays. `buttons` stand before it on the line and set its width.
+// this row; the rest stays. `buttons` stand before it on the line and fix its width.
 const remarkField = (v: RowView, i: number, placeholder: string, buttons: string[]) => {
   const { Box, Input, prefix: k } = v
   return (
@@ -1014,7 +1014,7 @@ export const register: Register = on => {
           .join(' '),
       }
     } catch (error) {
-      return { result: `The decisions could not be set up: ${String(error)}` }
+      return { result: `The decisions could not be prepared: ${String(error)}` }
     }
   })
 
@@ -1038,7 +1038,7 @@ export const register: Register = on => {
   // Then the mirrored question no longer belongs in the bar.
   on('prompt.submit', async ($, e, next) => {
     // The "hidden — Restore" row belongs to the moment of hiding; /decisions keeps working.
-    await update($, lastHidden, set => (set && set.show ? { ...set, show: false } : set)).catch(() => undefined)
+    await update($, lastHidden, last => (last && last.show ? { ...last, show: false } : last)).catch(() => undefined)
     await commitDrafts($).catch(() => undefined)
     const text = e.text.trim()
     await read($, rows)
@@ -1164,11 +1164,11 @@ export const register: Register = on => {
     // box appears, which is exactly when it is needed.
     const table = $.ui.resolve(e) as Elements
     if (list.length === 0) {
-      const set = await read($, lastHidden)
-      if (!set || !set.show || set.rows.length === 0) {
+      const hidden = await read($, lastHidden)
+      if (!hidden || !hidden.show || hidden.rows.length === 0) {
         return next(e)
       }
-      return hiddenNotice($, table, translator(await read($, texts)), set.rows.length)
+      return hiddenNotice($, table, translator(await read($, texts)), hidden.rows.length)
     }
     const v = await rowView($, table, { surface: e.surface, rows: list, prefix: '', columns: e.props.bodyColumns })
     return (await read($, collapsed)) ? collapsedBar($, v, e.props.bodyColumns) : expandedBar($, v)
