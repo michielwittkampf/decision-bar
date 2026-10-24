@@ -1,6 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
+import type { Row } from '../types'
+import { mergeProposals } from './register'
+
 const BAND = {
   plugin: 'decision-bar',
   component: 'AbovePrompt',
@@ -1038,4 +1041,56 @@ test('a translation may use joiners and be longer, but not turn text around', as
   expect(String(res.result)).toMatch(/: restore\./)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ key: 'hide' }))?.text).toContain('پنهان‌سازی')
+})
+
+// mergeProposals on its own: how a tool call's proposals join the rows already in the bar.
+const row = (label: string, text: string, d: Row['d'] = null, r = ''): Row => ({ p: { label, text }, d, r })
+const QUESTION: Row = {
+  p: { label: 'Question', text: 'Commit?', options: [{ label: 'Yes', text: 'Yes, commit' }] },
+  d: null,
+  r: 'later',
+}
+
+test('merge: new labels go before a mirrored question; existing rows keep choice and remark', () => {
+  const before = [row('T1', 'tea', 'agree', 'hot'), QUESTION]
+  const merged = mergeProposals(before, [{ label: 'T1', text: 'tea' }, { label: 'T2', text: 'penguin' }], new Set(), [])
+  expect(merged.rows).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin'), QUESTION])
+  expect(merged.added).toEqual(['T2'])
+  expect(merged.updated).toEqual([])
+  expect(merged.removed).toEqual([])
+  expect(merged.skipped).toEqual([])
+})
+
+test('merge: an updated proposal starts again without its choice and its remark', () => {
+  const merged = mergeProposals([row('T1', 'tea', 'disagree', 'too hot')], [{ label: 'T1', text: 'coffee' }], new Set(), [])
+  expect(merged.rows).toEqual([row('T1', 'coffee')])
+  expect(merged.updated).toEqual(['T1'])
+  expect(merged.added).toEqual([])
+})
+
+test('merge: remove takes out rows that were there, not a label proposed in the same call or a question', () => {
+  const before = [row('T1', 'tea', 'agree'), row('T2', 'penguin'), QUESTION]
+  const merged = mergeProposals(
+    before,
+    [{ label: 'T3', text: 'four legs' }],
+    new Set(['T1', 'T3', 'Question', 'gone']),
+    [],
+  )
+  expect(merged.rows).toEqual([row('T2', 'penguin'), row('T3', 'four legs'), QUESTION])
+  expect(merged.removed).toEqual(['T1'])
+  expect(merged.added).toEqual(['T3'])
+})
+
+test('merge: a label the user hid is skipped, and the rows passed in are left as they were', () => {
+  const before = [row('T1', 'tea', 'agree', 'hot')]
+  const copy = JSON.parse(JSON.stringify(before))
+  const merged = mergeProposals(
+    before,
+    [{ label: 'T1', text: 'coffee' }, { label: 'T2', text: 'penguin' }],
+    new Set(),
+    ['T2'],
+  )
+  expect(merged.rows).toEqual([row('T1', 'coffee')])
+  expect(merged.skipped).toEqual(['T2'])
+  expect(before).toEqual(copy)
 })

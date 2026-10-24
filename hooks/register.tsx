@@ -324,6 +324,35 @@ const parseProposals = (input: unknown): Proposal[] =>
     .filter(p => p.label !== '')
     .map(p => ({ label: p.label, text: p.text || p.label }))
 
+// A tool call's proposals merged into the bar's rows. Existing rows keep their choice and remark;
+// an updated proposal (other text) starts again without either, so a remark written for the old
+// text does not go out with the new one. New labels are added, before a mirrored question. A label
+// the user hid is skipped. `remove` takes out rows that were in the bar; a label proposed in this
+// same call stays. Exported for its tests.
+export const mergeProposals = (rows: Row[], incoming: Proposal[], toRemove: Set<string>, hidden: string[]) => {
+  const skipped = incoming.filter(p => hidden.includes(p.label)).map(p => p.label)
+  const admitted = incoming.filter(p => !hidden.includes(p.label))
+  const removed = rows.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
+  // A new array: the rows passed in are left as they are.
+  const merged = rows.filter(row => row.p.options || !toRemove.has(row.p.label))
+  const updated: string[] = []
+  const added: string[] = []
+  for (const p of admitted) {
+    const at = merged.findIndex(row => !row.p.options && row.p.label === p.label)
+    if (at === -1) {
+      added.push(p.label)
+      const question = merged.findIndex(row => row.p.options)
+      merged.splice(question === -1 ? merged.length : question, 0, { p, d: null, r: '' })
+    } else if (merged[at]!.p.text !== p.text) {
+      merged[at] = { p, d: null, r: '' }
+      updated.push(p.label)
+    }
+  }
+  // No limit: a decision only leaves the bar when it is sent, hidden or removed.
+  const kept = [...merged.filter(row => !row.p.options), ...merged.filter(row => row.p.options)]
+  return { rows: kept, added, updated, removed, skipped }
+}
+
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
   await commitDrafts($)
@@ -771,38 +800,7 @@ export const register: Register = on => {
       await commitDrafts($)
       const languageSentence = await setLanguage($, languageCode(languageInput), translationInput)
       const [before, hidden] = await Promise.all([read($, rows), read($, hiddenLabels)])
-      const skipped = incoming.filter(p => hidden.includes(p.label)).map(p => p.label)
-      const admitted = incoming.filter(p => !hidden.includes(p.label))
-
-      // Existing rows keep their choice and remark; an updated proposal (other text) starts again
-      // without either, so a remark written for the old text does not go out with the new one. New
-      // labels are added, before a mirrored question.
-      // `remove` takes out rows that were in the bar; a label proposed in this same call stays.
-      const removed = before.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
-      const merged = before
-        .filter(row => row.p.options || !toRemove.has(row.p.label))
-        .map(row => ({ ...row }))
-      const updated: string[] = []
-      const added: string[] = []
-      for (const p of admitted) {
-        const existing = merged.find(row => !row.p.options && row.p.label === p.label)
-        if (existing) {
-          if (existing.p.text !== p.text) {
-            existing.p = p
-            existing.d = null
-            existing.r = ''
-            updated.push(p.label)
-          }
-        } else {
-          added.push(p.label)
-          const at = merged.findIndex(row => row.p.options)
-          merged.splice(at === -1 ? merged.length : at, 0, { p, d: null, r: '' })
-        }
-      }
-      const decisionRows = merged.filter(row => !row.p.options)
-      // No limit: a decision only leaves the bar when it is sent, hidden or removed.
-      const keep = [...decisionRows, ...merged.filter(row => row.p.options)]
-
+      const { rows: keep, added, updated, removed, skipped } = mergeProposals(before, incoming, toRemove, hidden)
       await update($, rows, () => keep)
 
       const sentence = (head: string, labels: string[]) => (labels.length > 0 ? `${head}: ${labels.join(', ')}.` : '')
