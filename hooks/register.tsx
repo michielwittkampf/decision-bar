@@ -66,9 +66,8 @@ const EN = {
 type TextKey = keyof typeof EN
 type Translate = (k: TextKey, vars?: Record<string, string | number>) => string
 
-// The chat language (ISO 639-1) and the texts for it; empty = English. Every session starts in
-// English; Claude reports another chat language with a call holding only `language`.
-const language = atom({ plugin: 'decision-bar', key: 'language' } as const, 'en')
+// The bar's texts in the chat language; empty = English. Every session starts in English; Claude
+// reports another chat language with a call holding only `language`.
 const texts = atom({ plugin: 'decision-bar', key: 'texts' } as const, {} as Record<string, string>)
 const storeKey = (code: string) => `translation:${code}`
 
@@ -268,21 +267,15 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
   return r ? `${core}\n${INDENT}${t('messageRemark', { remark: r })}` : core
 }
 
-// Sets or clears (pressing the chosen state again) the decision of the open row with `label`;
-// used by the boxes in the chat, which know a decision by its label, not its index.
-const chooseByLabel = async ($: EngineInterface, label: string, decision: Exclude<Decision, null>) => {
-  await commitDrafts($)
-  const list = await read($, proposals)
-  const i = list.findIndex(p => !p.options && p.label === label)
-  if (i < 0) {
-    return
-  }
-  await update($, decisions, old => {
-    const choices = list.map((_, j) => old[j] ?? null)
-    choices[i] = choices[i] === decision ? null : decision
-    return choices
-  })
-}
+// The `proposals` argument of a tool call, as Claude sent it: entries without a label are left out,
+// and a proposal without text shows its label.
+const parseProposals = (input: unknown): Proposal[] =>
+  (Array.isArray(input) ? input : [])
+    .filter(
+      (p): p is { label: string; text: string } =>
+        typeof p?.label === 'string' && typeof p?.text === 'string' && p.label.trim() !== '',
+    )
+    .map(p => ({ label: p.label.trim(), text: p.text.trim() || p.label.trim() }))
 
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
@@ -442,7 +435,6 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
     return ''
   }
   if (code === 'en') {
-    await update($, language, () => 'en')
     await update($, texts, () => ({}))
     return ''
   }
@@ -452,7 +444,6 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
   if (Object.keys(accepted).length > 0) {
     await $.store.set(storeKey(code), merged)
   }
-  await update($, language, () => code)
   await update($, texts, () => merged)
 
   const missing = (Object.keys(EN) as TextKey[]).filter(k => !(k in merged))
@@ -738,12 +729,7 @@ export const register: Register = on => {
       language: languageInput,
       translation: translationInput,
     } = e as { proposals?: unknown; remove?: unknown; language?: unknown; translation?: unknown }
-    const incoming = (Array.isArray(proposalsInput) ? proposalsInput : [])
-      .filter(
-        (p): p is { label: string; text: string } =>
-          typeof p?.label === 'string' && typeof p?.text === 'string' && p.label.trim() !== '',
-      )
-      .map((p): Proposal => ({ label: p.label.trim(), text: p.text.trim() || p.label.trim() }))
+    const incoming = parseProposals(proposalsInput)
     const toRemove = new Set(
       (Array.isArray(removeInput) ? removeInput : []).filter((l): l is string => typeof l === 'string').map(l => l.trim()),
     )
@@ -807,8 +793,8 @@ export const register: Register = on => {
           .filter(s => s !== '')
           .join(' '),
       }
-    } catch {
-      return { result: 'The decisions could not be set up.' }
+    } catch (error) {
+      return { result: `The decisions could not be set up: ${String(error)}` }
     }
   })
 
@@ -871,9 +857,7 @@ export const register: Register = on => {
     }
     drawnOn.add(e.surface)
     const input = e.props.input as { proposals?: unknown }
-    const asked = (Array.isArray(input?.proposals) ? input.proposals : [])
-      .filter((p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string')
-      .map((p): Proposal => ({ label: p.label.trim(), text: p.text.trim() || p.label.trim() }))
+    const asked = parseProposals(input?.proposals)
     if (asked.length === 0) {
       return next(e)
     }
