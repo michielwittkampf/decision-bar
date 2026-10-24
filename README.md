@@ -106,8 +106,8 @@ next to each place the scan points at.
 - **"Uses a credential from the user's machine."** A false positive: the mod reads no environment,
   files or credentials and makes no network requests. The scanner took `set` (as in
   `$.store.set(…)`, `new Set(…)` and a variable named `set`) for the shell builtin that prints the
-  environment, and a test label built as `` `Decision${i + 1}` `` for a command assembled at run
-  time.
+  environment, and pairs that with any web address in the plugin as a way to send data off the
+  machine; in `plugin.json` those are only the listing's links (author, homepage, support).
 
 ## What would make it better
 
