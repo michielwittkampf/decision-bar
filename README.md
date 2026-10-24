@@ -1,13 +1,13 @@
 # decision-bar
 
-A [Claude Code](https://claude.com/claude-code) mod for working through many decisions without
-losing track of them.
+Work through (many) decisions without losing track, at your own pace and in your own order. A
+[Claude Code](https://claude.com/claude-code) mod.
 
-When Claude needs your input, the decisions it proposes go into a bar above the input field
-instead of interrupting the conversation. They wait there while you keep working: do some
-research or ask Claude to change something in between. Answer them when you are
-ready, in the order you choose — agree or disagree, add a remark, send one or all at once. The
-bar always shows what is still open and what you have already decided.
+When Claude needs your input, the questions no longer get buried in its reply. Every decision it
+asks for goes into one bar above the prompt, and shows in context in the chat as well, the two
+kept in sync. Each stays clearly open until you answer it or it no longer applies. Meanwhile you
+keep working: dig into one, ask Claude to change something, come back to the rest. Then agree,
+disagree or add a remark, and send one or all at once.
 
 ![The decision bar with two decisions, a remark shown in full, and Send all](docs/main.png)
 
@@ -31,28 +31,32 @@ In the desktop app:
 Click + next to the prompt box, then Plugins → Add marketplace → michielwittkampf/decision-bar → Add plugin
 ```
 
-Works in the desktop app (Code tab) and in the terminal; on mobile with buttons only.
-
-**Not in a side chat of the desktop app.** The app shows nothing a mod draws there, so neither the
-bar nor the decision boxes appear; Claude asks in the chat instead. A change request is filed:
-[#103429](https://github.com/anthropics/claude-code/issues/103429).
+Works in the desktop app (Code tab) and in the terminal, and on mobile with buttons only. Not yet
+in a side chat of the desktop app, where Claude asks in the chat instead
+([#103429](https://github.com/anthropics/claude-code/issues/103429)).
 
 ## Why use it
 
-- **Many decisions, one overview.** As many open decisions as you need, each with its own choice
-  and remark, and a heading that counts what is open and what is chosen. New questions join the
-  list instead of replacing it.
+- **One overview instead of questions scattered through the text.** However many decisions are
+  open, they are together in one place, each with its own choice and remark, and a heading that
+  counts what is open and what is chosen. New questions join the list instead of replacing it.
+- **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave
+  the rest while you dig into them; Claude can keep working in the meantime.
 - **Decide in context.** The decisions also appear in the chat, right next to Claude's
-  reasoning. Answer there while you read, or later in the bar. In the terminal you type a remark
-  in the bar; the box in the chat shows it.
+  reasoning. Answer there while you read, or later in the bar. Afterwards the box keeps showing
+  what you decided and which remark went with which decision, so scrolling back shows each answer
+  next to its question. In the terminal you type a remark in the bar; the box in the chat shows
+  it.
 
   ![A decision box in the chat, with a choice, a remark and Send all](docs/box.png)
 
-- **Your order, your pace.** Nothing blocks the conversation. Answer one decision now and leave
-  the rest while you dig into them; Claude can keep working in the meantime.
+- **Nothing gets lost.** A decision stays visibly open until you answer it. Answered it in the
+  chat, or has it been overtaken? Claude takes it off the list. Hidden decisions come back with
+  `/decisions`.
+- **More than yes or no.** Agree or disagree with a remark, or send just a remark: it goes out
+  with the decision it is about, so Claude knows exactly what it refers to.
 - **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
-  every decision, and the conversation gets the space back. Answered something in the chat
-  instead? Claude takes it off the list.
+  every decision, and the conversation gets the space back.
 
   ![Collapsed, the bar shrinks to one line and leaves the space above it free for the conversation](docs/collapsed.png)
 
