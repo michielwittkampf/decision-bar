@@ -11,7 +11,7 @@
   "repository": "https://github.com/michielwittkampf/decision-bar",
   "supportUrl": "https://github.com/michielwittkampf/decision-bar/issues",
   "documentationUrl": "https://github.com/michielwittkampf/decision-bar#readme",
-  "privacyPolicyUrl": "https://github.com/michielwittkampf/decision-bar#what-the-mod-does",
+  "privacyPolicyUrl": "https://github.com/michielwittkampf/decision-bar/blob/main/PRIVACY.md",
   "termsOfServiceUrl": "https://github.com/michielwittkampf/decision-bar/blob/main/LICENSE",
   "keywords": ["decisions", "mod", "workflow", "review", "prompt"],
   "license": "MIT"

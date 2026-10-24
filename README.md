@@ -63,6 +63,7 @@ bar nor the decision boxes appear; Claude asks in the chat instead. A change req
 ## What the mod does
 
 Everything stays on your machine: the mod makes no network requests and reads no credentials.
+The short version is in [PRIVACY.md](PRIVACY.md); the details are below.
 
 - **Instructions for Claude.** Each turn the mod adds one section to what Claude is told
   (`prompt.compose`): when to put decisions in the bar, how to word them, and the form the answers
