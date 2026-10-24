@@ -60,6 +60,31 @@ bar nor the decision boxes appear; Claude asks in the chat instead. A change req
 
   ![The bar in Dutch, with several decisions, each with its own choice and remark, and the counts in the heading](docs/many.png)
 
+## What the mod does
+
+Everything stays on your machine: the mod makes no network requests and reads no credentials.
+
+- **Instructions for Claude.** Each turn the mod adds one section to what Claude is told
+  (`prompt.compose`): when to put decisions in the bar, how to word them, and the form the answers
+  come back in. It leaves everything else Claude is told as it is.
+- **Its own tool.** The mod registers the `decisions` tool and answers it itself (`tool.call`):
+  it puts the proposals in the bar and tells Claude which decisions are open, whether you can see
+  the bar, and, for a new chat language, which of the bar's texts to translate. Every other tool
+  call passes through unchanged. Of those, it only reads the question and answer buttons of the
+  desktop app's next-step box, to show that question in the bar as well.
+- **What it sends as you.** Only when you click Send, Send all, Agree to all or an answer button
+  does the mod submit a message in your name (`$.prompt.submit`), and it holds nothing but your
+  answers: a line per decision, `<label> <agree|disagree>: <proposal>` or
+  `<label> (no decision yet)`, with your remark on its own line below; for a question, the text of
+  the button you picked, with your remark. Label and proposal are the ones Claude put in the bar;
+  agree, disagree and remark follow the chat language.
+- **Your own prompts** (`prompt.submit`, `prompt.edit`) are only read to keep a remark you were
+  typing, and to take a question off the bar when you typed one of its answers yourself.
+- **The `/decisions` command** (`command.run`) brings the decisions you hid last back into the bar.
+- **What it keeps.** Decisions, choices and remarks live in the session's state. The bar's texts
+  in each language Claude translated them into are kept in the mod's own store, so a language is
+  translated once.
+
 ## What would make it better
 
 Things the mod works around today, as feedback for the Claude Code team and for other mod authors,
@@ -110,7 +135,7 @@ proposed as a built-in feature in
 | `hooks/register.tsx` | the tool, Claude's instructions, state and the bar |
 | `hooks/decision-bar.test.tsx` | behaviour tests (terminal and desktop) |
 | `types/index.d.ts` | type contract of the state |
-| `.claude-plugin/` | manifest and marketplace file |
+| `.claude-plugin/` | manifest, marketplace file and the directory icon |
 
 1. Run your checkout with `claude --plugin-dir .`, or install it from the folder:
    `claude plugin marketplace add .` and `claude plugin install decision-bar@michielwittkampf`.
