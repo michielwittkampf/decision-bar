@@ -496,7 +496,7 @@ test('collapsing shows a summary; expanding brings the rows back', async ($, on)
 test('collapsed and too narrow for two lines: only the counts', async ($, on) => {
   setup(on)
 
-  const many = Array.from({ length: 7 }, (_, i) => ({ label: `Decision${i + 1}`, text: `proposal ${i + 1}` }))
+  const many = Array.from({ length: 7 }, (_, i) => ({ label: 'Decision' + (i + 1), text: `proposal ${i + 1}` }))
   await $.tool.call({ tool: TOOL, ...EN, proposals: many })
   const wide = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 200 } })
   await wide.press({ key: 'agree-0' })
@@ -505,7 +505,7 @@ test('collapsed and too narrow for two lines: only the counts', async ($, on) =>
   await wide.press({ key: 'toggle' })
   await wide.redraw()
   expect(await wide.find({ type: 'Text', text: '4 open and 3 decided' })).toBeUndefined()
-  const full = ['Decision1 ✓', 'Decision2 ✗', 'Decision3 ✓', ...[4, 5, 6, 7].map(n => `Decision${n} ○`)].join(S)
+  const full = ['Decision1 ✓', 'Decision2 ✗', 'Decision3 ✓', ...[4, 5, 6, 7].map(n => 'Decision' + n + ' ○')].join(S)
   expect(await wide.find({ type: 'Text', text: full })).toBeDefined()
   await wide.unmount()
 

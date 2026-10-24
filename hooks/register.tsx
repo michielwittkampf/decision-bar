@@ -107,7 +107,8 @@ const MAX_TEXT = 200
 // Not translated: it is language-neutral, and a translation of it would be the one place where
 // text from Claude is added to every answer line the user sends.
 const FIXED: readonly string[] = ['messageDecision']
-// An own key of EN only: `'constructor' in EN` is true too, and such a key broke the call.
+// An own key of EN only: `in` is also true for the keys every object inherits, and such a key
+// broke the call.
 const isTextKey = (k: string): k is TextKey => Object.prototype.hasOwnProperty.call(EN, k)
 
 // A translation from Claude: only known keys with one short line of text and the same {placeholders}.
@@ -170,7 +171,9 @@ let lastField: string | undefined
 let drawnOn = new Set<string>()
 
 // Whether the user can see the bar now: this mod drew on a surface that is still attached. Where
-// the engine cannot say which surfaces are attached, assume it can.
+// the engine cannot say which surfaces are attached, assume it can. The answer only decides
+// whether the tool result asks Claude to put the decisions in its reply too (NOT_VISIBLE); the
+// surfaces read here never go into a prompt.
 const isVisible = async ($: EngineInterface) => {
   const attached = await $.session.surfaces().catch(() => undefined)
   return attached === undefined || attached.some(s => drawnOn.has(s))
@@ -453,13 +456,18 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     }
     return recorded
   })
+  // Sent as the user, because these are the user's answers, and only from a press of Send, Send
+  // all, Agree or Enter in a remark field: no hook sends. The message holds the rows' labels and
+  // proposals (checked, see the comment above `languageCode`), the bar's texts and what the user
+  // typed, nothing else read from the session. README: "What the mod does".
   // A blank line between answers, so each stands on its own in the chat.
   await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
 }
 
 // An answer button of a question: sends that text (with the remark below it) and removes only
-// that question.
+// that question. Only on the user's press, and the text is what the same button in the desktop
+// app's own next-step box would send; see `send` for why it goes as the user.
 const pickOption = async ($: EngineInterface, i: number, option: Option) => {
   await commitDrafts($)
   const r = (await read($, rows))[i]?.r.trim() ?? ''
@@ -931,12 +939,15 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // Only this mod's own /decisions command (the matcher); other commands never reach this hook.
   on('command.run', { command: COMMAND }, async $ => {
     const count = await restore($)
     const t = await currentTranslator($)
     return { text: count > 0 ? t('commandRestored', { n: count }) : t('commandEmpty') }
   })
 
+  // Adds one section of its own, INSTRUCTIONS: how Claude uses the bar. Everything else Claude is
+  // told passes through unchanged. README: "What the mod does".
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
 
@@ -947,6 +958,9 @@ export const register: Register = on => {
   })
 
   // No matcher on the exact name: the engine may report the tool with a prefix.
+  // This hook answers one tool itself: `decisions`, the tool this mod registers, which has nothing
+  // else behind it (`isOurTool`). Of the desktop app's wrap_up it only reads the question and its
+  // buttons, then lets the call run. Every other tool call passes through untouched.
   on('tool.call', async ($, e, next) => {
     if (e.tool.includes('ccd_turn') && e.tool.endsWith('__wrap_up')) {
       // The previous mirrored question makes way for the new one; decisions stay.

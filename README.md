@@ -92,12 +92,17 @@ Everything stays on your machine: the mod makes no network requests and reads no
 
 ### Notes for reviewers
 
-Two findings of the plugin directory's scan, and why they are what they are:
+Findings of the plugin directory's scan, and why they are what they are. The code says the same
+next to each place the scan points at.
 
 - **"Mod can read the conversation and submit a prompt."** Submitting the answers is the mod's
   purpose. Nothing reaches the message except the label and proposal Claude put in the bar, the
-  bar's own texts and what you typed, and only on your click or Enter; no hook submits. See
-  [What the mod does](#what-the-mod-does).
+  bar's own texts and what you typed, and only on your click or Enter; no hook submits. What the
+  mod reads (`session.surfaces`) only decides whether Claude is told to ask in its reply as well,
+  and never goes into a message. See [What the mod does](#what-the-mod-does).
+- **"Unrecognized field in plugin.json: `types`."** Claude Code ignores it when loading, but
+  `claude plugin validate` reads it: it points at the type contract of the mod's state
+  (`types/index.d.ts`), which the validator checks the mod against.
 - **"Uses a credential from the user's machine."** A false positive: the mod reads no environment,
   files or credentials and makes no network requests. The scanner took `set` (as in
   `$.store.set(…)`, `new Set(…)` and a variable named `set`) for the shell builtin that prints the
