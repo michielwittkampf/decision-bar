@@ -113,7 +113,7 @@ proposed as a built-in feature in
 | `.claude-plugin/` | manifest and marketplace file |
 
 1. Run your checkout with `claude --plugin-dir .`, or install it from the folder:
-   `claude plugin marketplace add .` and `claude plugin install decision-bar@decision-bar`.
+   `claude plugin marketplace add .` and `claude plugin install decision-bar@michielwittkampf`.
 2. Change the code and tests; check with `claude plugin validate .` and `claude plugin test .`.
 3. In a running session, `/reload-plugins` picks up the change.
 

@@ -1,6 +1,6 @@
 {
-  "name": "decision-bar",
-  "description": "The decision bar for Claude Code",
+  "name": "michielwittkampf",
+  "description": "Claude Code plugins by Michiel Wittkampf",
   "owner": { "name": "Michiel Wittkampf" },
   "plugins": [{ "name": "decision-bar", "source": "./" }]
 }
