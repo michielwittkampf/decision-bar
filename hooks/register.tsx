@@ -26,7 +26,8 @@ const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, fa
 // as visibly stale text next to the field.
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
 // The decision sent per proposal (`rowKey`), so its box in the chat can show what was answered.
-const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, 'agree' | 'disagree'>)
+// An answer button's choice is kept as `→ <answer>`.
+const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, string>)
 // The remark sent with that decision, if any, shown under it in the box.
 const sentAnswerRemarks = atom({ plugin: 'decision-bar', key: 'answeredRemarks' } as const, {} as Record<string, string>)
 
@@ -57,6 +58,7 @@ const EN = {
   closed: 'closed',
   nothingToSendDecision: 'Nothing to send: choose agree or disagree, or type a remark.',
   messageDecision: '{label} {decision}: {proposal}',
+  messageAnswer: '{label} → {answer}: {proposal}',
   undecided: '{label} (no decision yet)',
   messageRemark: 'Remark: {remark}',
   commandRestored: '{n} decision(s) back above the prompt.',
@@ -102,7 +104,7 @@ const UNSAFE = /[\p{Cc}\u2028\u2029]|(?![\u200C-\u200F])\p{Cf}/u
 const MAX_TEXT = 200
 // Not translated: it is language-neutral, and a translation of it would be the one place where
 // text from Claude is added to every answer line the user sends.
-const FIXED: readonly string[] = ['messageDecision']
+const FIXED: readonly string[] = ['messageDecision', 'messageAnswer']
 // An own key of EN only: `in` is also true for the keys every object inherits, and such a key
 // broke the call.
 const isTextKey = (k: string): k is TextKey => Object.prototype.hasOwnProperty.call(EN, k)
@@ -267,6 +269,7 @@ const INSTRUCTIONS = [
   '- `language`: the language of the chat as an ISO 639-1 code (en, nl, de, …). The bar shows its own texts in that language; the answers come back in it too.',
   '- `label`: the short name of the decision, such as "C13" or "Order". No "agree" in it: the user picks agree or disagree.',
   '- `text`: the proposal in one sentence, complete enough to understand without your reply; the bar shows label and text, both in the chat language.',
+  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. The answer that is sent is exactly the button text.',
   '- In your reply, use the same label, in bold, for each proposal, so the user can find the row in the bar.',
   'Each call draws a box with its decisions in the chat, so place it where you discuss them: several calls in one reply are fine, each after the text it belongs to. Always keep text between a call and any other tool call: the desktop app folds consecutive tool calls into a collapsed group, which hides the box.',
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
@@ -274,9 +277,9 @@ const INSTRUCTIONS = [
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
   'If the tool result starts a sentence with "Not visible", the user cannot see the bar in this session (for example a side chat in the desktop app): ask those decisions in your reply as well, with the same labels, and do not say they are in the bar.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
-  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead. Not when the tool result says "Not visible": then the box is the place to ask.',
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not when the tool result says "Not visible": then the box is the place to ask.',
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
-  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>" or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
+  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>", "<label> → <answer>: <proposal>" (an answer button) or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
   'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
 ].join('\n')
 
@@ -287,11 +290,15 @@ const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: stri
     // The remark always goes on its own line, so it is never mistaken for the proposal.
     return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
   }
-  const core = t('messageDecision', {
-    label: p.label,
-    decision: t(decision === 'agree' ? 'agree' : 'disagree'),
-    proposal: p.text,
-  })
+  // An answer button sends the text it shows, nothing else (see `parseOptions`).
+  const core =
+    typeof decision === 'number'
+      ? t('messageAnswer', { label: p.label, answer: p.options?.[decision] ?? '', proposal: p.text })
+      : t('messageDecision', {
+          label: p.label,
+          decision: t(decision === 'agree' ? 'agree' : 'disagree'),
+          proposal: p.text,
+        })
   return r ? `${core}\n${INDENT}${t('messageRemark', { remark: r })}` : core
 }
 
@@ -311,17 +318,34 @@ const oneLine = (text: string, max: number) => {
 }
 const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!@\s]+/, '')
 
+// Answer buttons in place of agree and disagree: two to four, each one plain line like a label.
+// What a button shows is exactly what is sent, so a press never carries text the user did not see.
+// Fewer than two: the row keeps agree and disagree.
+const MAX_OPTIONS = 4
+const parseOptions = (input: unknown): string[] | undefined => {
+  const options = [
+    ...new Set((Array.isArray(input) ? input : []).filter((o): o is string => typeof o === 'string').map(cleanLabel)),
+  ]
+    .filter(o => o !== '')
+    .slice(0, MAX_OPTIONS)
+  return options.length >= 2 ? options : undefined
+}
+
 // The `proposals` argument of a tool call, as Claude sent it: entries without a label are left out,
 // and a proposal without text shows its label.
 const parseProposals = (input: unknown): Proposal[] =>
   (Array.isArray(input) ? input : [])
-    .filter((p): p is { label: string; text: string } => typeof p?.label === 'string' && typeof p?.text === 'string')
-    .map(p => ({ label: cleanLabel(p.label), text: oneLine(p.text, MAX_PROPOSAL) }))
+    .filter((p): p is { label: string; text: string; options?: unknown } => typeof p?.label === 'string' && typeof p?.text === 'string')
+    .map(p => ({ label: cleanLabel(p.label), text: oneLine(p.text, MAX_PROPOSAL), options: parseOptions(p.options) }))
     .filter(p => p.label !== '')
-    .map(p => ({ label: p.label, text: p.text || p.label }))
+    .map(({ options, ...p }): Proposal => ({ label: p.label, text: p.text || p.label, ...(options ? { options } : {}) }))
+
+// Same proposal: same text and the same answer buttons, if any.
+const sameProposal = (a: Proposal, b: Proposal) =>
+  a.text === b.text && JSON.stringify(a.options ?? null) === JSON.stringify(b.options ?? null)
 
 // A tool call's proposals merged into the bar's rows. Existing rows keep their choice and remark;
-// an updated proposal (other text) starts again without either, so a remark written for the old
+// an updated proposal (other text or answers) starts again without either, so a remark written for the old
 // text does not go out with the new one. New labels are added at the end. A label the user hid is
 // skipped. `remove` takes out rows that were in the bar; a label proposed in this same call stays.
 // Exported for its tests.
@@ -338,7 +362,7 @@ export const mergeProposals = (rows: Row[], incoming: Proposal[], toRemove: Set<
     if (at === -1) {
       added.push(p.label)
       merged.push({ p, d: null, r: '' })
-    } else if (merged[at]!.p.text !== p.text) {
+    } else if (!sameProposal(merged[at]!.p, p)) {
       merged[at] = { p, d: null, r: '' }
       updated.push(p.label)
     }
@@ -348,8 +372,10 @@ export const mergeProposals = (rows: Row[], incoming: Proposal[], toRemove: Set<
 }
 
 // Up to 1.2.9 the bar copied the question of the desktop app's next-step box into a row of its
-// own, with `options`. Such a row in a session's state goes. Exported for its tests.
-export const withoutQuestions = (list: Row[]) => list.filter(row => !('options' in row.p))
+// own, with `options` as objects. Such a row in a session's state goes; answer buttons (strings)
+// stay. Exported for its tests.
+export const withoutQuestions = (list: Row[]) =>
+  list.filter(row => !(row.p.options ?? []).some(o => typeof o !== 'string'))
 
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
@@ -390,7 +416,7 @@ const clear = async ($: EngineInterface) => {
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
   await commitDrafts($)
   const stored = await read($, rows)
-  const list = agreeToAll ? stored.map((row): Row => ({ ...row, d: 'agree' })) : stored
+  const list = agreeToAll ? stored.map((row): Row => (row.p.options ? row : { ...row, d: 'agree' })) : stored
   const sentBefore = await read($, sentRemarks)
   const t = await currentTranslator($)
   // Only a remark, and exactly that one was sent already: not again.
@@ -424,11 +450,11 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   })
   // Remember what was decided, so the decision's box in the chat can show it.
   await update($, sentDecisions, old => {
-    const recorded: Record<string, 'agree' | 'disagree'> = { ...(old as Record<string, 'agree' | 'disagree'>) }
+    const recorded: Record<string, string> = { ...old }
     for (const i of indexes) {
       const row = list[i]
       if (row && row.d !== null) {
-        recorded[rowKey(row.p)] = row.d
+        recorded[rowKey(row.p)] = typeof row.d === 'number' ? `→ ${row.p.options?.[row.d] ?? ''}` : row.d
       }
     }
     return recorded
@@ -662,7 +688,8 @@ const fullRemark = (v: RowView, p: Proposal, i: number) => {
   )
 }
 
-// One decision row: label, proposal, agree / disagree, remark field and its full text below.
+// One decision row: label, proposal, agree / disagree or its answer buttons, remark field and its
+// full text below.
 const decisionRow = (v: RowView, p: Proposal, i: number) => {
   const { Box, Button, Text, t, prefix: k, sent } = v
   const d = v.stored[i]?.d ?? null
@@ -679,19 +706,32 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
         columnGap={1}
         marginLeft={v.labelWidth + 1}
       >
-        <Button
-          key={`${k}agree-${i}`}
-          label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
-          variant={d === 'agree' ? 'primary' : 'secondary'}
-          onPress={() => v.choose(i, 'agree')}
-        />
-        <Button
-          key={`${k}disagree-${i}`}
-          label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
-          variant={d === 'disagree' ? 'primary' : 'secondary'}
-          onPress={() => v.choose(i, 'disagree')}
-        />
-        {remarkField(v, i, t('remarkField'), [`○ ${t('agree')}`, `○ ${t('disagree')}`])}
+        {p.options ? (
+          p.options.map((o, n) => (
+            <Button
+              key={`${k}answer-${i}-${n}`}
+              label={`${d === n ? '●' : '○'} ${o}`}
+              variant={d === n ? 'primary' : 'secondary'}
+              onPress={() => v.choose(i, n)}
+            />
+          ))
+        ) : (
+          [
+            <Button
+              key={`${k}agree-${i}`}
+              label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
+              variant={d === 'agree' ? 'primary' : 'secondary'}
+              onPress={() => v.choose(i, 'agree')}
+            />,
+            <Button
+              key={`${k}disagree-${i}`}
+              label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
+              variant={d === 'disagree' ? 'primary' : 'secondary'}
+              onPress={() => v.choose(i, 'disagree')}
+            />,
+          ]
+        )}
+        {remarkField(v, i, t('remarkField'), (p.options ?? [t('agree'), t('disagree')]).map(o => `○ ${o}`))}
         {v.remarkAsText && r.trim() && (
           <Text key={`${k}remark-text-${i}`} dimColor>
             {`✎ ${r.trim()}`}
@@ -741,11 +781,11 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
   const { Box, Button, Text, t, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
   const hasSomething = current.some(row => row.d !== null || row.r.trim())
-  // Per row its state: ✓ agree / ✗ disagree / ○ nothing yet, ✎ with a remark.
+  // Per row its state: ✓ agree / ✗ disagree / ● an answer chosen / ○ nothing yet, ✎ with a remark.
   const summary = current
     .map(({ p, d, r }) => {
       const pen = r.trim() ? ' ✎' : ''
-      const state = d === 'agree' ? '✓' : d === 'disagree' ? '✗' : '○'
+      const state = d === 'agree' ? '✓' : d === 'disagree' ? '✗' : typeof d === 'number' ? '●' : '○'
       return `${p.label} ${state}${pen}`
     })
     .join(SEPARATOR)
@@ -772,6 +812,8 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
 const expandedBar = ($: EngineInterface, v: RowView) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
+  // Agree is not an answer to a row with answer buttons, so "Agree to all" counts only the others.
+  const agreeable = stored.filter(row => !row.p.options).length
   // "Send all" is always there: typing a remark alone does not redraw the bar, so the button
   // would otherwise appear only after another action.
   const sendAll = async () => {
@@ -793,7 +835,9 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
         {stored.map(({ p }, i) => decisionRow(v, p, i))}
         <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
           <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
-          <Button key="agree-all" label={t(stored.length === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
+          {agreeable > 0 && (
+            <Button key="agree-all" label={t(agreeable === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
+          )}
           <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
         </Box>
       </Box>
@@ -840,6 +884,12 @@ export const register: Register = on => {
               properties: {
                 label: { type: 'string', description: 'Short name of the decision (e.g. "C13")' },
                 text: { type: 'string', description: 'The proposal in one sentence' },
+                options: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Optional: 2 to 4 short answers shown as buttons in place of agree / disagree; the chosen one is sent as shown',
+                },
               },
               required: ['label', 'text'],
             },
@@ -1027,7 +1077,11 @@ export const register: Register = on => {
                   {p.text}
                 </Text>
                 <Text key={`${prefix}closed-answer-${k}`} dimColor>
-                  {answer === 'agree' ? `✓ ${t('agree')}` : answer === 'disagree' ? `✗ ${t('disagree')}` : t('closed')}
+                  {answer === 'agree'
+                    ? `✓ ${t('agree')}`
+                    : answer === 'disagree'
+                      ? `✗ ${t('disagree')}`
+                      : (answer ?? t('closed'))}
                 </Text>
                 {answer && doneRemarks[rowKey(p)] && (
                   <Text key={`${prefix}closed-remark-${k}`} dimColor>

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0 — unreleased
+
+- Answer buttons: Claude can give a decision two to four answers of its own ("Commit now", "Run
+  the tests first", "Not yet") in place of agree and disagree. You choose one and send it as any
+  decision; the line sent is `<label> → <answer>: <proposal>`, the answer exactly as its button
+  shows it. Agree to all leaves those decisions open. Design: `docs/answer-buttons.md`.
+- Claude is told to put a closing question with such answers in the bar, rather than in the
+  desktop app's next-step box, while decisions are open.
+
 ## 1.3.0 — 2026-10-26
 
 - The question of the desktop app's next-step box is no longer copied into the bar. The app hides

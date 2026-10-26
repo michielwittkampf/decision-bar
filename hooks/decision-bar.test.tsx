@@ -995,6 +995,104 @@ test('a translation may use joiners and be longer, but not turn text around', as
   expect((await ui.find({ key: 'hide' }))?.text).toContain('پنهان‌سازی')
 })
 
+// Answer buttons: a decision whose answers are not agree or disagree.
+const RELEASE = { label: 'R1', text: 'Commit the release.', options: ['Commit now', 'Run the tests first', 'Not yet'] }
+
+test('answer buttons replace agree and disagree; the chosen answer is sent as shown', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'agree-1' })).toBeUndefined()
+  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('○ Run the tests first')
+  // The first row keeps agree and disagree.
+  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+
+  await ui.press({ key: 'answer-1-1' })
+  await ui.redraw()
+  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('● Run the tests first')
+  // Pressed again: no choice.
+  await ui.press({ key: 'answer-1-1' })
+  await ui.redraw()
+  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('○')
+
+  await ui.press({ key: 'answer-1-0' })
+  await ui.input({ key: 'remark-1', text: 'after lunch' })
+  expect(sent).toEqual(['R1 → Commit now: Commit the release.\n↳ Remark: after lunch'])
+  await ui.redraw()
+  expect(await ui.find({ key: 'answer-1-0' })).toBeUndefined()
+})
+
+test('"Agree to all" leaves rows with answer buttons open; with only those it is not there', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  // One row agree can answer: the singular label.
+  expect((await ui.find({ key: 'agree-all' }))?.text).toContain('Agree')
+  expect((await ui.find({ key: 'agree-all' }))?.text).not.toContain('all')
+  await ui.press({ key: 'agree-all' })
+  expect(sent).toEqual(['T1 agree: tea on Tuesday'])
+  await ui.redraw()
+  expect(await ui.find({ key: 'answer-0-0' })).toBeDefined()
+  expect(await ui.find({ key: 'agree-all' })).toBeUndefined()
+})
+
+test('answers are two to four plain lines; fewer leaves agree and disagree', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({
+    tool: TOOL,
+    ...EN,
+    proposals: [
+      { label: 'A', text: 'one answer only', options: ['Yes'] },
+      { label: 'B', text: 'too many', options: ['one', 'two', 'two', 'three\nlines', '', 'four', 'five'] },
+    ],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+  expect(await ui.find({ key: 'answer-0-0' })).toBeUndefined()
+  // Duplicates and empty ones go, line breaks become spaces, at most four.
+  expect((await ui.find({ key: 'answer-1-2' }))?.text).toContain('three lines')
+  expect((await ui.find({ key: 'answer-1-3' }))?.text).toContain('four')
+  expect(await ui.find({ key: 'answer-1-4' })).toBeUndefined()
+})
+
+test('collapsed, a chosen answer shows as ●', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'answer-1-2' })
+  await ui.press({ key: 'toggle' })
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: ['T1 ○', 'R1 ●'].join(S) })).toBeDefined()
+})
+
+test('the chat box shows the answer buttons, and after sending the chosen answer', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: [RELEASE] },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  await row.press({ key: 'chat-call-1-answer-0-2' })
+  await row.press({ key: 'chat-call-1-send-box' })
+  expect(sent.at(-1)).toBe('R1 → Not yet: Commit the release.')
+  await row.redraw()
+  expect(await row.find({ type: 'Text', text: '→ Not yet' })).toBeDefined()
+})
+
 // mergeProposals on its own: how a tool call's proposals join the rows already in the bar.
 const row = (label: string, text: string, d: Row['d'] = null, r = ''): Row => ({ p: { label, text }, d, r })
 // A question as 1.2.9 copied it from the next-step box into the bar.
@@ -1046,4 +1144,18 @@ test('merge: a label the user hid is skipped, and the rows passed in are left as
 test('a question copied by 1.2.9 goes; decisions keep choice and remark', () => {
   const before = [row('T1', 'tea', 'agree', 'hot'), QUESTION, row('T2', 'penguin')]
   expect(withoutQuestions(before)).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin')])
+})
+
+test('merge: other answers start the proposal again without its choice and remark', () => {
+  const before: Row[] = [{ p: RELEASE, d: 1, r: 'soon' }]
+  const merged = mergeProposals(before, [{ ...RELEASE, options: ['Commit now', 'Not yet'] }], new Set(), [])
+  expect(merged.rows).toEqual([{ p: { ...RELEASE, options: ['Commit now', 'Not yet'] }, d: null, r: '' }])
+  expect(merged.updated).toEqual(['R1'])
+  // The same answers again: choice and remark stay.
+  expect(mergeProposals(before, [RELEASE], new Set(), []).rows).toEqual(before)
+})
+
+test('answer buttons are not taken for a question copied by 1.2.9', () => {
+  const before: Row[] = [{ p: RELEASE, d: 0, r: '' }, QUESTION]
+  expect(withoutQuestions(before)).toEqual([{ p: RELEASE, d: 0, r: '' }])
 })
