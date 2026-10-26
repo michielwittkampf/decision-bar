@@ -113,6 +113,12 @@ each with its issue on anthropics/claude-code where one is filed. The decision b
 proposed as a built-in feature in
 [#103281](https://github.com/anthropics/claude-code/issues/103281).
 
+- **The band above the prompt beside the next-step box.** While the desktop app's next-step box
+  (`wrap_up`) asks a question with answer buttons, the app does not show the band above the
+  prompt, although it asks the mod to draw it and `hasSurvey` is false. All open decisions are out
+  of sight exactly when Claude waits for an answer. The mod therefore tells Claude to ask in the
+  bar instead while decisions are open; a band that stays visible beside the box would let both be
+  used.
 - **A text input that grows with its text**
   ([#103305](https://github.com/anthropics/claude-code/issues/103305)). The desktop app draws an
   `Input` at a fixed width on one line. One that widens to the room on the line and then wraps onto
