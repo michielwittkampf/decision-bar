@@ -1417,3 +1417,24 @@ test('the closing-question rule follows the setting: in the bar always, or only 
   expect(instructions(true)).toContain('"Not visible": then the box is the place to ask')
   expect(instructions(false)).toContain('"Not visible": then the box is the place to ask')
 })
+
+test('a duplicate answer lends its text to the first one without; a row with texts survives the 1.2.9 clean-up', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({
+    tool: TOOL,
+    ...EN,
+    proposals: [{ label: 'D', text: 'Deploy.', options: ['Now', { label: 'Now', text: 'Now, and watch it' }, 'Later'] }],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'answer-0-0' })
+  await ui.redraw()
+  expect((await ui.find({ key: 'answer-text-box-0' }))?.text).toBe('→ Now, and watch it')
+  // Two answers left: buttons, no third.
+  expect(await ui.find({ key: 'answer-0-2' })).toBeUndefined()
+  await ui.press({ key: 'send-all' })
+  expect(sent).toEqual(['D → Now, and watch it: Deploy.'])
+
+  const rowWithTexts: Row = { p: { label: 'X', text: 'x', options: ['A', 'B'], details: ['A long', ''] }, d: 0, r: '' }
+  expect(withoutQuestions([rowWithTexts, QUESTION])).toEqual([rowWithTexts])
+})

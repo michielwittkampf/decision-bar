@@ -290,7 +290,7 @@ export const instructions = (questionInBar: boolean) => [
   '- `language`: the language of the chat as an ISO 639-1 code (en, nl, de, …). The bar shows its own texts in that language; the answers come back in it too.',
   '- `label`: the short name of the decision, such as "C13" or "Order". No "agree" in it: the user picks agree or disagree.',
   '- `text`: the proposal in one sentence, complete enough to understand without your reply; the bar shows label and text, both in the chat language.',
-  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. Two show as buttons, three or four as a menu; the answer that is sent is exactly the text shown. When a few words cannot say it, give an answer as `{label, text}`: the label on the button, the full answer in one sentence as `text`; the row shows that text once the answer is chosen, and it is what is sent.',
+  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. Two show as buttons, three or four as a menu; the answer that is sent is exactly the text shown. When a few words cannot say it, give an answer as `{label, text}`: the label on the button, the full answer in one sentence (at most 200 characters) as `text`; the row shows that text once the answer is chosen, and it is what is sent.',
   '- In your reply, use the same label, in bold, for each proposal, so the user can find the row in the bar.',
   'Each call draws a box with its decisions in the chat, so place it where you discuss them: several calls in one reply are fine, each after the text it belongs to. Always keep text between a call and any other tool call: the desktop app folds consecutive tool calls into a collapsed group, which hides the box.',
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
@@ -348,17 +348,22 @@ const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!@\s
 const MAX_OPTIONS = 4
 const MAX_ANSWER_TEXT = 200
 const parseOptions = (input: unknown): { options: string[]; details?: string[] } | undefined => {
-  const seen = new Set<string>()
-  const answers = (Array.isArray(input) ? input : [])
-    .map(o =>
+  // One answer per label, in the order given; a later duplicate only lends its text to one without.
+  const answers: { label: string; text: string }[] = []
+  for (const o of Array.isArray(input) ? input : []) {
+    const a =
       typeof o === 'string'
         ? { label: cleanLabel(o), text: '' }
         : o && typeof o === 'object' && typeof o.label === 'string'
           ? { label: cleanLabel(o.label), text: typeof o.text === 'string' ? oneLine(o.text, MAX_ANSWER_TEXT) : '' }
-          : { label: '', text: '' },
-    )
-    .filter(a => a.label !== '' && !seen.has(a.label) && seen.add(a.label))
-    .slice(0, MAX_OPTIONS)
+          : { label: '', text: '' }
+    const same = answers.find(b => b.label === a.label)
+    if (same) {
+      same.text ||= a.text
+    } else if (a.label !== '' && answers.length < MAX_OPTIONS) {
+      answers.push(a)
+    }
+  }
   if (answers.length < 2) {
     return undefined
   }

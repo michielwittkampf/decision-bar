@@ -69,5 +69,7 @@ app's own box would have sent. For buttons Claude defines in the bar that argume
 - Does a row with four answers and a remark field get too busy in the desktop app, and in the
   terminal? To judge in the running app.
 - Should the collapsed bar show the chosen answer, or only that one was chosen (●)? A shows ●.
+  With B this matters more: an answer chosen before collapsing can be sent with Send all from the
+  collapsed bar, where its longer text is not on screen at that moment (it was when chosen).
 - Buttons for two answers and a menu from three: does that read as one design, or should it be
   one or the other?

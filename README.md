@@ -56,7 +56,8 @@ in a side chat of the desktop app, where Claude asks in the chat instead
 - **More than yes or no.** Agree or disagree with a remark, or send just a remark: it goes out
   with the decision it is about, so Claude knows exactly what it refers to. Where the answer is
   not yes or no, Claude gives the decision its own answers ("Commit now", "Run the tests first",
-  "Not yet"): two as buttons, more in a menu.
+  "Not yet"): two as buttons, more in a menu. An answer can carry a longer text, which the row
+  shows in full once you choose it, and which is what is sent.
 - **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
   every decision, and the conversation gets the space back.
 
