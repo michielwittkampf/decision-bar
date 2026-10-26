@@ -1394,12 +1394,13 @@ test('a longer text is one plain line of limited length', async ($, on) => {
 
 // mergeProposals on its own: how a tool call's proposals join the rows already in the bar.
 const row = (label: string, text: string, d: Row['d'] = null, r = ''): Row => ({ p: { label, text }, d, r })
-// A question as 1.2.9 copied it from the next-step box into the bar.
+// A question as 1.2.9 copied it from the next-step box into the bar. Its `options` are 1.2.9's
+// objects, not this version's answer labels, so it is no Row by today's type.
 const QUESTION = {
   p: { label: 'Question', text: 'Commit?', options: [{ label: 'Yes', text: 'Yes, commit' }] },
   d: null,
   r: 'later',
-} as Row
+} as unknown as Row
 
 test('merge: new labels go at the end; existing rows keep choice and remark', () => {
   const before = [row('T1', 'tea', 'agree', 'hot')]
