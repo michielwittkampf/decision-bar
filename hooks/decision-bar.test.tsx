@@ -519,6 +519,23 @@ test('in English: no request for a translation', async ($, on) => {
   expect((await ui.find({ key: 'hide' }))?.text).toContain('Hide')
 })
 
+test('a language translated before 1.4 is asked only for the new texts', async ($, on) => {
+  setup(on)
+
+  // As kept by 1.3: the old key for the "nothing to send" toast, no key for the menu's empty entry.
+  const { chooseAnswer: _c, nothingToSend: _n, ...before } = NL
+  await $.tool.call({
+    tool: TOOL,
+    language: 'nl',
+    translation: { ...before, nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord.' },
+  })
+  const res = await $.tool.call({ tool: TOOL, language: 'nl' })
+  const result = String(res.result)
+  expect(result).toContain('"chooseAnswer"')
+  expect(result).toContain('"nothingToSend"')
+  expect(result).not.toContain('"agree"')
+})
+
 test('a new language: English until Claude supplies the texts, and only what is missing is asked for', async ($, on) => {
   setup(on)
 
@@ -1189,6 +1206,23 @@ test('in the terminal a row with its own answers lays out like the others', asyn
   expect((await ui.find({ key: 'answer-1-0' }))?.text).toContain('Yes')
   expect(await ui.find({ key: 'answers-2' })).toBeDefined()
   expect(await ui.find({ key: 'remark-2' })).toBeDefined()
+
+  // A chat row in the terminal takes no keys: three answers stay buttons there.
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'terminal',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: [RELEASE] },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  expect(await row.find({ key: 'chat-call-1-answers-2' })).toBeUndefined()
+  expect((await row.find({ key: 'chat-call-1-answer-2-2' }))?.text).toContain('Not yet')
 })
 
 test('Claude is told about answers of its own, and the tool takes them', async ($, on) => {

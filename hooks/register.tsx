@@ -26,7 +26,7 @@ const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, fa
 // as visibly stale text next to the field.
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
 // The decision sent per proposal (`rowKey`), so its box in the chat can show what was answered.
-// An answer button's choice is kept as `→ <answer>`.
+// A chosen answer of its own is kept as `→ <answer>`.
 const sentDecisions = atom({ plugin: 'decision-bar', key: 'answered' } as const, {} as Record<string, string>)
 // The remark sent with that decision, if any, shown under it in the box.
 const sentAnswerRemarks = atom({ plugin: 'decision-bar', key: 'answeredRemarks' } as const, {} as Record<string, string>)
@@ -273,7 +273,7 @@ const INSTRUCTIONS = [
   '- `language`: the language of the chat as an ISO 639-1 code (en, nl, de, …). The bar shows its own texts in that language; the answers come back in it too.',
   '- `label`: the short name of the decision, such as "C13" or "Order". No "agree" in it: the user picks agree or disagree.',
   '- `text`: the proposal in one sentence, complete enough to understand without your reply; the bar shows label and text, both in the chat language.',
-  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. The answer that is sent is exactly the button text.',
+  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. Two show as buttons, three or four as a menu; the answer that is sent is exactly the text shown.',
   '- In your reply, use the same label, in bold, for each proposal, so the user can find the row in the bar.',
   'Each call draws a box with its decisions in the chat, so place it where you discuss them: several calls in one reply are fine, each after the text it belongs to. Always keep text between a call and any other tool call: the desktop app folds consecutive tool calls into a collapsed group, which hides the box.',
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
@@ -283,7 +283,7 @@ const INSTRUCTIONS = [
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
   'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not when the tool result says "Not visible": then the box is the place to ask.',
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
-  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>", "<label> → <answer>: <proposal>" (an answer button) or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
+  'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>", "<label> → <answer>: <proposal>" (one of its own answers) or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
   'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
 ].join('\n')
 
@@ -296,7 +296,7 @@ const messageLine = (t: Translate, p: Proposal, chosen: Decision, remark: string
     // The remark always goes on its own line, so it is never mistaken for the proposal.
     return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
   }
-  // An answer button sends the text it shows, nothing else (see `parseOptions`).
+  // An answer of its own sends the text it shows, nothing else (see `parseOptions`).
   const core =
     typeof decision === 'number'
       ? t('messageAnswer', { label: p.label, answer: p.options?.[decision] ?? '', proposal: p.text })
@@ -324,8 +324,8 @@ const oneLine = (text: string, max: number) => {
 }
 const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!@\s]+/, '')
 
-// Answer buttons in place of agree and disagree: two to four, each one plain line like a label.
-// What a button shows is exactly what is sent, so a press never carries text the user did not see.
+// Answers of its own in place of agree and disagree: two to four, each one plain line like a label.
+// What the row shows is exactly what is sent, so a pick never carries text the user did not see.
 // Fewer than two: the row keeps agree and disagree.
 const MAX_OPTIONS = 4
 const parseOptions = (input: unknown): string[] | undefined => {
@@ -346,7 +346,7 @@ const parseProposals = (input: unknown): Proposal[] =>
     .filter(p => p.label !== '')
     .map(({ options, ...p }): Proposal => ({ label: p.label, text: p.text || p.label, ...(options ? { options } : {}) }))
 
-// Same proposal: same text and the same answer buttons, if any.
+// Same proposal: same text and the same answers of its own, if any.
 const sameProposal = (a: Proposal, b: Proposal) =>
   a.text === b.text && JSON.stringify(a.options ?? null) === JSON.stringify(b.options ?? null)
 
@@ -529,7 +529,7 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
 }
 
 // The elements of one surface, as `$.ui.resolve` hands them out (the same for the bar and a
-// chat row); `Input` and `Select` are missing on mobile.
+// chat row). On mobile `Input` and `Select` draw nothing (see `menus`).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Elements = { Box: any; Button: any; Text: any; Input?: any; Select?: any }
 
@@ -634,9 +634,10 @@ const rowView = async (
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
   const roomy = surface !== 'terminal'
-  // Only the terminal and the desktop app draw a Select; elsewhere (mobile) the element is there
-  // but draws nothing, so the answers stay buttons.
-  const menus = surface === 'terminal' || surface === 'desktop'
+  // A menu only where it can be used: the terminal and the desktop app draw a Select, mobile draws
+  // nothing for it, and a chat row in the terminal takes no keys (see `remarkAsText`). Elsewhere the
+  // answers stay buttons, which a click reaches.
+  const menus = (surface === 'terminal' || surface === 'desktop') && !remarkAsText
   // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
   // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
   const labelWidth = Math.min(14, Math.max(0, ...shown.map(p => [...p.label].length)) + 2)
@@ -855,7 +856,7 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
 const expandedBar = ($: EngineInterface, v: RowView) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
-  // Agree is not an answer to a row with answer buttons, so "Agree to all" counts only the others.
+  // Agree is not an answer to a row with answers of its own, so "Agree to all" takes only the others.
   const agreeable = stored.map((row, i) => (row.p.options ? -1 : i)).filter(i => i >= 0)
   // "Send all" is always there: typing a remark alone does not redraw the bar, so the button
   // would otherwise appear only after another action.
@@ -935,7 +936,7 @@ export const register: Register = on => {
                   type: 'array',
                   items: { type: 'string' },
                   description:
-                    'Optional: 2 to 4 short answers shown as buttons in place of agree / disagree; the chosen one is sent as shown',
+                    'Optional: 2 to 4 short answers in place of agree / disagree (two as buttons, more as a menu); the chosen one is sent as shown',
                 },
               },
               required: ['label', 'text'],

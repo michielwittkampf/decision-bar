@@ -31,7 +31,8 @@ the session's "waiting for you" state in the sidebar.
   agree is not one of their answers. With no row that agree answers, the button is not there.
 - A proposal whose text or answers change starts again without choice and remark, and without
   the confirmation of a remark sent for the old one. A press drawn for the old answers is dropped.
-- The chat box shows the same buttons, and after sending the chosen answer.
+- The chat box shows the same answers (in the terminal always as buttons: a chat row there takes no
+  keys), and after sending the chosen answer.
 
 ## Rule for what is sent
 
