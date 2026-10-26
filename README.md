@@ -152,9 +152,11 @@ proposed as a built-in feature in
 - **Mod drawing in a side chat** ([#103429](https://github.com/anthropics/claude-code/issues/103429)).
   decision-bar does not work in a side chat of the desktop app: the app shows nothing the mod
   draws there, no bar above the prompt and no decision box in the chat, although the mod runs and
-  stores the decisions. The mod notices that it was never asked to draw there and tells Claude to
-  ask in the chat instead. A session started from another session (not as a side chat) shows the
-  bar and the boxes.
+  stores the decisions. A mod cannot tell a side chat from a session you have not opened yet:
+  in both, nothing has been drawn and no surface is attached. So the tool result names both cases
+  and Claude, whose prompt says which session it is in, asks in the chat only in a side chat. A
+  session started from another session (not as a side chat) shows the bar and the boxes once you
+  open it.
 - **Spacing in proportional layouts.** Margins come in whole character cells, which is coarse in
   the desktop app.
 
@@ -180,10 +182,14 @@ The `plugin-authoring` skill in Claude Code has the mod API for your version. Th
   field back to the start of its text, so a remark wider than the field is typed out of sight. A
   test with short text does not show this.
 - Tool arguments sit flat in `e` (`e.proposals`); in tests `$.tool.call({ tool, proposals })`.
-- Whether the user can see the bar is `isVisible`: the app asked this mod itself to draw its bar
-  or a chat box (`drawnOn`) on a surface that `$.session.surfaces()` still lists. The list alone
-  is not enough: it holds every client of the session, also one there for another mod's pane or
-  another feature. In tests, answer `session.surfaces` with `{ value: [...] }`.
+- Whether the user can see the bar is `visibility`: the app asked this mod itself to draw its bar
+  or a chat box (`drawnOn`) on a surface that `$.session.surfaces()` lists now, or, with nothing
+  listed now, on any surface earlier in the session: the desktop app attaches only while the
+  session is on screen. The list alone is not enough: it holds every client of the session, also
+  one there for another mod's pane or another feature. Nothing listed and nothing drawn is a side
+  chat or a session not opened yet; the two look the same to a mod (the app's prompt that tells
+  them apart is not in what `prompt.compose` hands it), so the result tells Claude both. In tests,
+  answer `session.surfaces` with `{ value: [...] }`.
 - `next` is reserved inside a hooks module: an inner variable named `next` stops it from loading.
 - The test kit has no `$.store`; `setup` in the tests provides one.
 - A tree the engine refuses (a prop out of range, such as a width of `-Infinity` from

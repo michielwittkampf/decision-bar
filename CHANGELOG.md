@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1 — 2026-10-26
+
+- No more false "Not visible" in a session the user has not opened yet, such as one started in
+  the background from another session, or one the user has looked at and left. The desktop app
+  attaches to a session only while it is on screen, so an empty list of surfaces does not mean the
+  bar cannot be seen. Drawn earlier in the session now counts as visible. Never drawn and nothing
+  attached, a side chat and a session not opened yet look the same to a mod: the tool result then
+  says "Not shown yet" and names both, and Claude, whose prompt says which session it is in, asks
+  in the chat only in a side chat
+  ([#103429](https://github.com/anthropics/claude-code/issues/103429)). Surfaces attached that
+  never drew the bar still give "Not visible".
+
 ## 1.4.0 — 2026-10-26
 
 - The question Claude ends a turn with goes in the bar whenever the bar can be seen, also when no
