@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
 import type { Row } from '../types'
-import { mergeProposals, withoutQuestions } from './register'
+import { instructions, mergeProposals, withoutQuestions } from './register'
 
 const BAND = {
   plugin: 'decision-bar',
@@ -1046,4 +1046,13 @@ test('merge: a label the user hid is skipped, and the rows passed in are left as
 test('a question copied by 1.2.9 goes; decisions keep choice and remark', () => {
   const before = [row('T1', 'tea', 'agree', 'hot'), QUESTION, row('T2', 'penguin')]
   expect(withoutQuestions(before)).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin')])
+})
+
+test('the closing-question rule follows the setting: in the bar always, or only while decisions are open', () => {
+  expect(instructions(true)).toContain('also when no other decisions are open')
+  expect(instructions(false)).toContain('when the bar has open decisions at the end of your turn')
+  expect(instructions(false)).not.toContain('also when no other decisions are open')
+  // Either way, not where the bar cannot be seen.
+  expect(instructions(true)).toContain('"Not visible": then the box is the place to ask')
+  expect(instructions(false)).toContain('"Not visible": then the box is the place to ask')
 })

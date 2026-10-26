@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 — 2026-10-26
+
+- The question Claude ends a turn with goes in the bar whenever the bar can be seen, also when no
+  other decisions are open, instead of in the desktop app's next-step box. There it stays until
+  you answer it; the box's question is gone once you send anything else, and while the box asks,
+  the app hides the bar. A setting, `closingQuestionInBar` (on by default), turns this back to
+  1.3.0's rule: only while decisions are open.
+
 ## 1.3.0 — 2026-10-26
 
 - The question of the desktop app's next-step box is no longer copied into the bar. The app hides
