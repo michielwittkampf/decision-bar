@@ -838,19 +838,77 @@ test('in the terminal a chat box shows the remark as text, without a field; the 
   expect(await desktop.find({ type: 'Text', text: '✎ rather purple' })).toBeUndefined()
 })
 
-// Visibility: the bar counts as visible only where the app asked this mod itself to draw it (the
-// bar or a chat box) on a surface that is still attached. A side chat in the desktop app runs the
-// mod but never asks it to draw; another surface of the session (another mod's pane, a phone that
-// never drew the bar) does not count.
+// Visibility: the bar counts as visible where the app asked this mod itself to draw it (the bar or
+// a chat box) on a surface that is attached now, or, with nothing attached now, drew it in this
+// session before: the desktop app attaches while the session is on screen. Another surface of the
+// session (another mod's pane, a phone that never drew the bar) does not count. With nothing
+// attached and nothing ever drawn, a side chat in the desktop app (never drawn) and a session the
+// user has not opened yet look the same: the result leaves it to Claude, which knows which it is.
 const NOT_VISIBLE = 'Not visible'
+const NOT_SHOWN_YET = 'Not shown yet'
 
-test('nothing attached (a side chat): the result says so, and the rows stay in the bar', async ($, on) => {
+test('nothing attached, nothing drawn yet (a side chat, or not opened yet): Claude is told both, the rows stay', async ($, on) => {
   setup(on)
   on('session.surfaces', () => ({ value: [] }))
 
   const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  expect(String(res.result)).toContain(NOT_VISIBLE)
+  expect(String(res.result)).toContain(NOT_SHOWN_YET)
+  expect(String(res.result)).toContain('side chat')
+  expect(String(res.result)).toContain('has not opened yet')
+  expect(String(res.result)).not.toContain(NOT_VISIBLE)
   expect(String(res.result)).toContain('Now open in the bar: T1, T2, T3')
+})
+
+test('drawn earlier, nothing attached now (the user looks at another session): no warning', async ($, on) => {
+  setup(on)
+  let attached: 'desktop'[] = ['desktop']
+  on('session.surfaces', () => ({ value: attached }))
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.unmount()
+  attached = []
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  expect(String(res.result)).not.toContain(NOT_VISIBLE)
+  expect(String(res.result)).not.toContain(NOT_SHOWN_YET)
+})
+
+test('a chat box drawn earlier counts as drawn too', async ($, on) => {
+  setup(on)
+  let attached: 'desktop'[] = ['desktop']
+  on('session.surfaces', () => ({ value: attached }))
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const box = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: PROPOSALS },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  await box.unmount()
+  attached = []
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'T4', text: 'fourth' }] })
+  expect(String(res.result)).not.toContain(NOT_VISIBLE)
+  expect(String(res.result)).not.toContain(NOT_SHOWN_YET)
+})
+
+test('the engine cannot say what is attached: no warning', async ($, on) => {
+  setup(on)
+  on('session.surfaces', () => {
+    throw new Error('no roster')
+  })
+
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  expect(String(res.result)).not.toContain(NOT_VISIBLE)
+  expect(String(res.result)).not.toContain(NOT_SHOWN_YET)
 })
 
 test('a surface the bar was never drawn on does not count', async ($, on) => {
@@ -1414,8 +1472,9 @@ test('the closing-question rule follows the setting: in the bar always, or only 
   expect(instructions(false)).toContain('when the bar has open decisions at the end of your turn')
   expect(instructions(false)).not.toContain('also when no other decisions are open')
   // Either way, not where the bar cannot be seen.
-  expect(instructions(true)).toContain('"Not visible": then the box is the place to ask')
-  expect(instructions(false)).toContain('"Not visible": then the box is the place to ask')
+  for (const questionInBar of [true, false]) {
+    expect(instructions(questionInBar)).toContain('"Not visible", or "Not shown yet" in a side chat): then the box is the place to ask')
+  }
 })
 
 test('a duplicate answer lends its text to the first one without; a row with texts survives the 1.2.9 clean-up', async ($, on) => {

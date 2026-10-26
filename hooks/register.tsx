@@ -178,16 +178,31 @@ let lastField: string | undefined
 // the desktop app runs the mod but never asks it to draw.
 let drawnOn = new Set<string>()
 
-// Whether the user can see the bar now: this mod drew on a surface that is still attached. Where
-// the engine cannot say which surfaces are attached, assume it can. The answer only decides
-// whether the tool result asks Claude to put the decisions in its reply too (NOT_VISIBLE); the
-// surfaces read here never go into a prompt.
-const isVisible = async ($: EngineInterface) => {
+// Whether the user can see the bar. `seen`: this mod drew on a surface that is attached now, or
+// nothing is attached now but it drew in this session before (the desktop app attaches while the
+// session is on screen; the user looks elsewhere and finds the bar on coming back). `hidden`:
+// surfaces are attached, but none drew it. `unknown`: nothing attached and nothing ever drawn. A
+// side chat of the desktop app, which never draws for a mod, and a session the user has not opened
+// yet (one started in the background) both look like that here, and the app's prompt that tells
+// them apart is not in what `prompt.compose` hands a mod: only Claude reads it (NOT_SHOWN_YET).
+// Where the engine cannot say which surfaces are attached, assume `seen`. The answer only decides
+// what the tool result asks of Claude; the surfaces read here never go into a prompt.
+type Visibility = 'seen' | 'hidden' | 'unknown'
+const visibility = async ($: EngineInterface): Promise<Visibility> => {
   const attached = await $.session.surfaces().catch(() => undefined)
-  return attached === undefined || attached.some(s => drawnOn.has(s))
+  if (attached === undefined || attached.some(s => drawnOn.has(s))) {
+    return 'seen'
+  }
+  if (attached.length > 0) {
+    return 'hidden'
+  }
+  return drawnOn.size > 0 ? 'seen' : 'unknown'
 }
 const NOT_VISIBLE =
-  'Not visible: this session has not drawn the bar or a decision box (for example a side chat in the desktop app), so the user cannot see them. Ask these decisions in your reply as well, with the same labels, and do not say they are in the bar. They stay in the bar in case it appears; remove them with `remove` once answered.'
+  'Not visible: this session has not drawn the bar or a decision box where the user is looking, so the user cannot see them. Ask these decisions in your reply as well, with the same labels, and do not say they are in the bar. They stay in the bar in case it appears; remove them with `remove` once answered.'
+const NOT_SHOWN_YET =
+  'Not shown yet: the app has not drawn the bar or a decision box in this session so far. In a side chat of the desktop app (a session the user forked to ask something on the side) it never will: there, ask these decisions in your reply as well, with the same labels, and do not say they are in the bar. In a session the user has not opened yet, such as one started from another session, the bar appears when they open it: there, nothing more is needed.'
+const visibilitySentence: Record<Visibility, string> = { seen: '', hidden: NOT_VISIBLE, unknown: NOT_SHOWN_YET }
 // The rows with what is typed but not yet committed as their remark.
 const withDrafts = (list: Row[]): Row[] => list.map(row => ({ ...row, r: drafts.get(rowKey(row.p)) ?? row.r }))
 const commitDrafts = async ($: EngineInterface) => {
@@ -278,9 +293,9 @@ const miniSummary = (t: Translate, list: Row[]) => {
 // anything else. With the setting `closingQuestionInBar` on (the default) the question goes in the
 // bar whenever the bar can be seen; off, only while decisions are open, so the bar is not hidden.
 const CLOSING_QUESTION_ALWAYS =
-  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons, and that question is gone once the user sends anything else. So while the bar can be seen, put the question you end your turn with in the bar as a decision, with its answers as `options` when they are not agree or disagree, also when no other decisions are open, and leave `ask` and `actions` out of `wrap_up`. Not when the tool result says "Not visible": then the box is the place to ask.'
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons, and that question is gone once the user sends anything else. So while the bar can be seen, put the question you end your turn with in the bar as a decision, with its answers as `options` when they are not agree or disagree, also when no other decisions are open, and leave `ask` and `actions` out of `wrap_up`. Not where the bar cannot be seen (the tool result says "Not visible", or "Not shown yet" in a side chat): then the box is the place to ask.'
 const CLOSING_QUESTION_WHILE_OPEN =
-  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not when the tool result says "Not visible": then the box is the place to ask.'
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not where the bar cannot be seen (the tool result says "Not visible", or "Not shown yet" in a side chat): then the box is the place to ask.'
 
 // What Claude is told about the bar, with the closing-question rule the setting picks. Exported for
 // its tests.
@@ -296,7 +311,7 @@ export const instructions = (questionInBar: boolean) => [
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
   'What is in the bar stays until the user sends or hides it, also while you chat. On a later call give only new or changed decisions: an existing label is updated, not duplicated. Remove a decision answered or overtaken in the chat with `remove: [label]`.',
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
-  'If the tool result starts a sentence with "Not visible", the user cannot see the bar in this session (for example a side chat in the desktop app): ask those decisions in your reply as well, with the same labels, and do not say they are in the bar.',
+  'If the tool result starts a sentence with "Not visible", the user cannot see the bar where they are looking: ask those decisions in your reply as well, with the same labels, and do not say they are in the bar. If it starts a sentence with "Not shown yet", the app has not drawn the bar in this session so far: in a side chat of the desktop app do the same, in a session the user has not opened yet (such as one started from another session) nothing more is needed.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
   questionInBar ? CLOSING_QUESTION_ALWAYS : CLOSING_QUESTION_WHILE_OPEN,
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
@@ -1063,7 +1078,7 @@ export const register: Register = (on, options) => {
 
       const sentence = (head: string, labels: string[]) => (labels.length > 0 ? `${head}: ${labels.join(', ')}.` : '')
       const open = keep.map(row => row.p.label)
-      const visible = await isVisible($)
+      const visible = await visibility($)
       return {
         result: [
           sentence('Added', added),
@@ -1071,7 +1086,7 @@ export const register: Register = (on, options) => {
           sentence('Removed', removed),
           sentence('Not shown, hidden earlier by the user', skipped),
           open.length > 0 ? `Now open in the bar: ${open.join(', ')}.` : 'The bar has no open decisions.',
-          open.length > 0 && !visible ? NOT_VISIBLE : '',
+          open.length > 0 ? visibilitySentence[visible] : '',
           languageSentence,
         ]
           .filter(s => s !== '')
