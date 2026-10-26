@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
 import type { Row } from '../types'
-import { mergeProposals, withoutQuestions } from './register'
+import { instructions, mergeProposals, withoutQuestions } from './register'
 
 const BAND = {
   plugin: 'decision-bar',
@@ -1407,4 +1407,13 @@ test('merge: another longer text for an answer starts the proposal again', () =>
   const changed = { ...p, details: ['Deploy now and watch it', ''] }
   expect(mergeProposals(before, [changed], new Set(), []).rows).toEqual([{ p: changed, d: null, r: '' }])
   expect(mergeProposals(before, [p], new Set(), []).rows).toEqual(before)
+})
+
+test('the closing-question rule follows the setting: in the bar always, or only while decisions are open', () => {
+  expect(instructions(true)).toContain('also when no other decisions are open')
+  expect(instructions(false)).toContain('when the bar has open decisions at the end of your turn')
+  expect(instructions(false)).not.toContain('also when no other decisions are open')
+  // Either way, not where the bar cannot be seen.
+  expect(instructions(true)).toContain('"Not visible": then the box is the place to ask')
+  expect(instructions(false)).toContain('"Not visible": then the box is the place to ask')
 })
