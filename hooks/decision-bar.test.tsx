@@ -1240,6 +1240,100 @@ test('Claude is told about answers of its own, and the tool takes them', async (
   expect(text).toContain('"<label> → <answer>: <proposal>"')
 })
 
+// Variant B: an answer may carry a longer text, shown below the row once chosen and sent in its
+// place.
+const DEPLOY = {
+  label: 'D1',
+  text: 'Deploy the fix.',
+  options: [
+    { label: 'Now', text: 'Deploy now and watch the error rate for an hour' },
+    'Tomorrow',
+  ],
+}
+
+test('an answer with a longer text shows it once chosen, and sends it', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [DEPLOY] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  // The button shows the short label; the longer text is not on screen yet.
+  expect((await ui.find({ key: 'answer-0-0' }))?.text).toContain('○ Now')
+  expect(await ui.find({ key: 'answer-text-box-0' })).toBeUndefined()
+
+  await ui.press({ key: 'answer-0-0' })
+  await ui.redraw()
+  expect((await ui.find({ key: 'answer-text-box-0' }))?.text).toBe('→ Deploy now and watch the error rate for an hour')
+
+  await ui.press({ key: 'send-all' })
+  expect(sent).toEqual(['D1 → Deploy now and watch the error rate for an hour: Deploy the fix.'])
+})
+
+test('an answer without a longer text sends its label, and shows no extra line', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [DEPLOY] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'answer-0-1' })
+  await ui.redraw()
+  expect(await ui.find({ key: 'answer-text-box-0' })).toBeUndefined()
+  await ui.press({ key: 'send-all' })
+  expect(sent).toEqual(['D1 → Tomorrow: Deploy the fix.'])
+})
+
+test('in a menu too, the chosen answer shows its longer text; the chat box shows what was sent', async ($, on) => {
+  const sent = setup(on)
+
+  const plan = {
+    label: 'P1',
+    text: 'Plan the release.',
+    options: ['Friday', { label: 'Monday', text: 'Monday, after the stand-up' }, { label: 'Later', text: 'Later' }],
+  }
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [plan] })
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'desktop',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: [plan] },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  await row.select({ key: 'chat-call-1-answers-0', value: '1' })
+  await row.redraw()
+  expect((await row.find({ key: 'chat-call-1-answer-text-box-0' }))?.text).toBe('→ Monday, after the stand-up')
+  // A longer text equal to its label adds nothing.
+  await row.select({ key: 'chat-call-1-answers-0', value: '2' })
+  await row.redraw()
+  expect(await row.find({ key: 'chat-call-1-answer-text-box-0' })).toBeUndefined()
+
+  await row.select({ key: 'chat-call-1-answers-0', value: '1' })
+  await row.press({ key: 'chat-call-1-send-box' })
+  expect(sent.at(-1)).toBe('P1 → Monday, after the stand-up: Plan the release.')
+  await row.redraw()
+  expect(await row.find({ type: 'Text', text: '→ Monday, after the stand-up' })).toBeDefined()
+})
+
+test('a longer text is one plain line of limited length', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({
+    tool: TOOL,
+    ...EN,
+    proposals: [{ label: 'L', text: 'long', options: [{ label: 'A', text: `two\nlines ${'x'.repeat(300)}` }, 'B'] }],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'answer-0-0' })
+  await ui.press({ key: 'send-all' })
+  const answer = sent[0]!.slice('L → '.length, -': long'.length)
+  expect(answer.startsWith('two lines x')).toBe(true)
+  expect(answer.endsWith('…')).toBe(true)
+  expect([...answer].length).toBe(200)
+})
+
 // mergeProposals on its own: how a tool call's proposals join the rows already in the bar.
 const row = (label: string, text: string, d: Row['d'] = null, r = ''): Row => ({ p: { label, text }, d, r })
 // A question as 1.2.9 copied it from the next-step box into the bar.
@@ -1305,4 +1399,12 @@ test('merge: other answers start the proposal again without its choice and remar
 test('answer buttons are not taken for a question copied by 1.2.9', () => {
   const before: Row[] = [{ p: RELEASE, d: 0, r: '' }, QUESTION]
   expect(withoutQuestions(before)).toEqual([{ p: RELEASE, d: 0, r: '' }])
+})
+
+test('merge: another longer text for an answer starts the proposal again', () => {
+  const p = { label: 'D1', text: 'Deploy the fix.', options: ['Now', 'Tomorrow'], details: ['Deploy now', ''] }
+  const before: Row[] = [{ p, d: 0, r: 'ok' }]
+  const changed = { ...p, details: ['Deploy now and watch it', ''] }
+  expect(mergeProposals(before, [changed], new Set(), []).rows).toEqual([{ p: changed, d: null, r: '' }])
+  expect(mergeProposals(before, [p], new Set(), []).rows).toEqual(before)
 })

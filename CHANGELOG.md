@@ -6,7 +6,9 @@
   tests first", "Not yet") in place of agree and disagree: two as buttons, three or four as one
   menu (buttons on mobile). You choose one and send it as any decision; the line sent is
   `<label> → <answer>: <proposal>`, the answer exactly as shown. Agree to all leaves those
-  decisions as they are. Design: `docs/answer-buttons.md`.
+  decisions as they are.
+- An answer may carry a longer text (one sentence) next to its short label. Once you choose it,
+  the row shows that text in full below it, and that text is what is sent. Design: `docs/answer-buttons.md`.
 - Claude is told to put a closing question with such answers in the bar, rather than in the
   desktop app's next-step box, while decisions are open.
 

@@ -1,7 +1,7 @@
 # Answer buttons in the bar (design)
 
-Status: variant A built on branch `claude/answer-buttons`, to try out; not released. Variant B is
-a possible extension.
+Status: to try out, not released. Variant A is built on branch `claude/answer-buttons`; variant B
+on branch `claude/answer-texts`, on top of A.
 
 ## Why
 
@@ -53,10 +53,12 @@ app's own box would have sent. For buttons Claude defines in the bar that argume
   are the whole message, and all of it is on screen.
 - Little to draw: the buttons replace agree and disagree on the same line.
 
-## Variant B: an answer may carry a longer text, shown before it is sent
+## Variant B: an answer may carry a longer text, shown before it is sent (built)
 
-- An answer is `{ label, text }`. The button shows the label; once chosen, the row shows the full
-  text below it, the way a long remark is shown in full today.
+- An answer is a label, or `{ label, text }`. The button or menu entry shows the label; once
+  chosen, the row shows the full text below it (`→ <text>`), the way a long remark is shown in
+  full today. The text is one plain line of up to 200 characters; one equal to its label is
+  dropped.
 - What is sent is that text, in the same shape: `<label> → <text>: <proposal>`.
 - Nothing goes out unseen, since the text is on screen before Send. The row grows by a line while
   an answer with its own text is chosen.

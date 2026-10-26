@@ -1,6 +1,7 @@
-// A decision Claude proposes: its label, the proposal in one sentence and, optionally, the answers
-// shown as buttons in place of agree and disagree.
-export type Proposal = { label: string; text: string; options?: string[] }
+// A decision Claude proposes: its label, the proposal in one sentence and, optionally, answers of its
+// own in place of agree and disagree, each with an optional longer text (`details`, same order; ''
+// for none) that is sent in its place.
+export type Proposal = { label: string; text: string; options?: string[]; details?: string[] }
 // Agree, disagree, the index of the chosen answer button, or nothing yet.
 export type Decision = 'agree' | 'disagree' | number | null
 // A row of the bar: the proposal with its choice and remark.

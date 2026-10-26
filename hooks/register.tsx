@@ -157,7 +157,13 @@ const TRAILER = '\n'
 // A proposal's identity: label and text, and its answers if it has them. Other answers make another
 // proposal, so a remark confirmation or a sent answer of the old one does not carry over.
 const rowKey = (p: Proposal) =>
-  p.options ? `${p.label}\u0000${p.text}\u0000${p.options.join('\u0001')}` : `${p.label}\u0000${p.text}`
+  p.options
+    ? `${p.label}\u0000${p.text}\u0000${p.options.join('\u0001')}\u0000${(p.details ?? []).join('\u0001')}`
+    : `${p.label}\u0000${p.text}`
+
+// What a chosen answer sends: its own longer text if it has one, else what its button or menu
+// entry shows. The longer text is on screen below the row as soon as the answer is chosen.
+const answerText = (p: Proposal, n: number) => p.details?.[n] || p.options?.[n]
 
 // What is typed in a remark field, per proposal (`rowKey`). Deliberately not in `$.state`: every
 // write there redraws the bar, and a redrawn field is handed its text again (`value`), which made
@@ -273,7 +279,7 @@ const INSTRUCTIONS = [
   '- `language`: the language of the chat as an ISO 639-1 code (en, nl, de, …). The bar shows its own texts in that language; the answers come back in it too.',
   '- `label`: the short name of the decision, such as "C13" or "Order". No "agree" in it: the user picks agree or disagree.',
   '- `text`: the proposal in one sentence, complete enough to understand without your reply; the bar shows label and text, both in the chat language.',
-  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. Two show as buttons, three or four as a menu; the answer that is sent is exactly the text shown.',
+  '- `options` (optional): when the answer is not agree or disagree, 2 to 4 short answers, each a few words that say the whole choice (for example "Run the tests first"); they replace agree and disagree for that decision. Two show as buttons, three or four as a menu; the answer that is sent is exactly the text shown. When a few words cannot say it, give an answer as `{label, text}`: the label on the button, the full answer in one sentence as `text`; the row shows that text once the answer is chosen, and it is what is sent.',
   '- In your reply, use the same label, in bold, for each proposal, so the user can find the row in the bar.',
   'Each call draws a box with its decisions in the chat, so place it where you discuss them: several calls in one reply are fine, each after the text it belongs to. Always keep text between a call and any other tool call: the desktop app folds consecutive tool calls into a collapsed group, which hides the box.',
   'Only real open decisions: not what you already built or did, and not what the user already answered in the chat (a short "go" or "ok" counts).',
@@ -296,10 +302,10 @@ const messageLine = (t: Translate, p: Proposal, chosen: Decision, remark: string
     // The remark always goes on its own line, so it is never mistaken for the proposal.
     return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
   }
-  // An answer of its own sends the text it shows, nothing else (see `parseOptions`).
+  // An answer of its own sends the text the row shows for it, nothing else (see `parseOptions`).
   const core =
     typeof decision === 'number'
-      ? t('messageAnswer', { label: p.label, answer: p.options?.[decision] ?? '', proposal: p.text })
+      ? t('messageAnswer', { label: p.label, answer: answerText(p, decision) ?? '', proposal: p.text })
       : t('messageDecision', {
           label: p.label,
           decision: t(decision === 'agree' ? 'agree' : 'disagree'),
@@ -324,17 +330,30 @@ const oneLine = (text: string, max: number) => {
 }
 const cleanLabel = (label: string) => oneLine(label, MAX_LABEL).replace(/^[/!@\s]+/, '')
 
-// Answers of its own in place of agree and disagree: two to four, each one plain line like a label.
-// What the row shows is exactly what is sent, so a pick never carries text the user did not see.
-// Fewer than two: the row keeps agree and disagree.
+// Answers of its own in place of agree and disagree: two to four, each one plain line like a label,
+// optionally with a longer text (one sentence) that is sent in its place. That text is shown in full
+// below the row once the answer is chosen, before anything is sent, so a pick never carries text
+// the user did not see. Fewer than two: the row keeps agree and disagree.
 const MAX_OPTIONS = 4
-const parseOptions = (input: unknown): string[] | undefined => {
-  const options = [
-    ...new Set((Array.isArray(input) ? input : []).filter((o): o is string => typeof o === 'string').map(cleanLabel)),
-  ]
-    .filter(o => o !== '')
+const MAX_ANSWER_TEXT = 200
+const parseOptions = (input: unknown): { options: string[]; details?: string[] } | undefined => {
+  const seen = new Set<string>()
+  const answers = (Array.isArray(input) ? input : [])
+    .map(o =>
+      typeof o === 'string'
+        ? { label: cleanLabel(o), text: '' }
+        : o && typeof o === 'object' && typeof o.label === 'string'
+          ? { label: cleanLabel(o.label), text: typeof o.text === 'string' ? oneLine(o.text, MAX_ANSWER_TEXT) : '' }
+          : { label: '', text: '' },
+    )
+    .filter(a => a.label !== '' && !seen.has(a.label) && seen.add(a.label))
     .slice(0, MAX_OPTIONS)
-  return options.length >= 2 ? options : undefined
+  if (answers.length < 2) {
+    return undefined
+  }
+  // A longer text equal to the label adds nothing.
+  const details = answers.map(a => (a.text === a.label ? '' : a.text))
+  return { options: answers.map(a => a.label), ...(details.some(Boolean) ? { details } : {}) }
 }
 
 // The `proposals` argument of a tool call, as Claude sent it: entries without a label are left out,
@@ -344,11 +363,13 @@ const parseProposals = (input: unknown): Proposal[] =>
     .filter((p): p is { label: string; text: string; options?: unknown } => typeof p?.label === 'string' && typeof p?.text === 'string')
     .map(p => ({ label: cleanLabel(p.label), text: oneLine(p.text, MAX_PROPOSAL), options: parseOptions(p.options) }))
     .filter(p => p.label !== '')
-    .map(({ options, ...p }): Proposal => ({ label: p.label, text: p.text || p.label, ...(options ? { options } : {}) }))
+    .map(({ options, ...p }): Proposal => ({ label: p.label, text: p.text || p.label, ...(options ?? {}) }))
 
 // Same proposal: same text and the same answers of its own, if any.
 const sameProposal = (a: Proposal, b: Proposal) =>
-  a.text === b.text && JSON.stringify(a.options ?? null) === JSON.stringify(b.options ?? null)
+  a.text === b.text &&
+  JSON.stringify(a.options ?? null) === JSON.stringify(b.options ?? null) &&
+  JSON.stringify(a.details ?? null) === JSON.stringify(b.details ?? null)
 
 // A tool call's proposals merged into the bar's rows. Existing rows keep their choice and remark;
 // an updated proposal (other text or answers) starts again without either, so a remark written for the old
@@ -464,7 +485,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     for (const i of indexes) {
       const row = list[i]
       if (row && row.d !== null) {
-        recorded[rowKey(row.p)] = typeof row.d === 'number' ? `→ ${row.p.options?.[row.d] ?? ''}` : row.d
+        recorded[rowKey(row.p)] = typeof row.d === 'number' ? `→ ${answerText(row.p, row.d) ?? ''}` : row.d
       }
     }
     return recorded
@@ -787,6 +808,11 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
           </Text>
         )}
       </Box>
+      {typeof d === 'number' && p.details?.[d] && (
+        <Box key={`${k}answer-text-box-${i}`} marginLeft={v.labelWidth + 1}>
+          <Text key={`${k}answer-text-${i}`} dimColor>{`→ ${p.details[d]}`}</Text>
+        </Box>
+      )}
       {fullRemark(v, p, i)}
     </Box>
   )
@@ -934,9 +960,21 @@ export const register: Register = on => {
                 text: { type: 'string', description: 'The proposal in one sentence' },
                 options: {
                   type: 'array',
-                  items: { type: 'string' },
+                  items: {
+                    anyOf: [
+                      { type: 'string' },
+                      {
+                        type: 'object',
+                        properties: {
+                          label: { type: 'string', description: 'The answer as its button or menu entry shows it' },
+                          text: { type: 'string', description: 'Optional: the full answer in one sentence, sent in its place' },
+                        },
+                        required: ['label'],
+                      },
+                    ],
+                  },
                   description:
-                    'Optional: 2 to 4 short answers in place of agree / disagree (two as buttons, more as a menu); the chosen one is sent as shown',
+                    'Optional: 2 to 4 short answers in place of agree / disagree (two as buttons, more as a menu); the chosen one is sent as shown, or its longer text, which the row shows once it is chosen',
                 },
               },
               required: ['label', 'text'],
