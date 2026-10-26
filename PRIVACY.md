@@ -5,7 +5,7 @@ your own answers, back into the same conversation.
 
 - **Nothing leaves your machine through the mod.** No network requests, no analytics, no
   telemetry. Its only output is a message in your name to the Claude Code conversation you are
-  in, and only when you press Send, Agree or an answer button, or Enter in a remark field.
+  in, and only when you press Send or Agree, or Enter in a remark field.
 - **It reads only what the bar needs:** the decisions Claude puts in it, what you type in it, and
   on which screens the session is shown (terminal, desktop app, phone), to know whether you can
   see the bar. No files, no environment variables, no credentials.

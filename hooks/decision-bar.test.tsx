@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On, RenderPropsOf } from 'claude-code'
 
 import type { Row } from '../types'
-import { mergeProposals } from './register'
+import { mergeProposals, withoutQuestions } from './register'
 
 const BAND = {
   plugin: 'decision-bar',
@@ -22,7 +22,6 @@ const S = '  ·  '
 // A full Dutch translation as Claude would supply it, for the language tests.
 const NL = {
   heading: 'Beslissingen',
-  question: 'Vraag',
   agree: 'akkoord',
   disagree: 'niet akkoord',
   open: '{n} open',
@@ -30,7 +29,6 @@ const NL = {
   decided: '{n} gemaakt',
   and: 'en',
   remarkField: 'opmerking (optioneel)',
-  answerField: 'of typ je eigen antwoord',
   send: 'verstuur',
   remarkSent: '✓ opmerking verstuurd',
   sendAll: 'Verstuur alles',
@@ -44,12 +42,10 @@ const NL = {
   restore: 'Terughalen',
   close: 'Sluiten',
   closed: 'gesloten',
-  nothingToSendAnswer: 'Niets te versturen: typ eerst een antwoord.',
   nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord, of typ een opmerking.',
   messageDecision: '{label} {decision}: {proposal}',
   undecided: '{label} (nog geen beslissing)',
   messageRemark: 'Opmerking: {remark}',
-  messageQuestion: 'Op je vraag "{question}": {answer}',
   commandRestored: '{n} beslissing(en) staan weer boven het invoerveld.',
   commandEmpty: 'Er zijn geen verborgen beslissingen om terug te halen.',
 }
@@ -294,68 +290,35 @@ const WRAP_UP = {
   tool: 'mcp__ccd_turn__wrap_up' as const,
   recap: 'Done.',
   ask: 'Shall I commit it?',
-  actions: [{ label: 'Yes, commit', message: 'Yes, commit it.' }, { label: 'No' }, { action: 'create_pr' }],
+  actions: [{ label: 'Yes, commit', message: 'Yes, commit it.' }, { label: 'No' }],
 }
 
-test('the question from the next-step box comes into the bar and stays', async ($, on) => {
-  const sent = setup(on)
-
-  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  await $.tool.call(WRAP_UP)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-
-  expect(await ui.find({ type: 'Text', text: 'Shall I commit it?' })).toBeDefined()
-  expect((await ui.find({ key: 'option-3-0' }))?.text).toContain('Yes, commit')
-  expect((await ui.find({ key: 'option-3-1' }))?.text).toContain('No')
-  // An app action without text is left out.
-  expect(await ui.find({ key: 'option-3-2' })).toBeUndefined()
-
-  await $.prompt.submit({ text: 'something else' } as Parameters<typeof $.prompt.submit>[0])
-  await ui.redraw()
-  expect(await ui.find({ key: 'option-3-0' })).toBeDefined()
-
-  await ui.press({ key: 'option-3-0' })
-  expect(sent.at(-1)).toBe('Yes, commit it.')
-  await ui.redraw()
-  expect(await ui.find({ key: 'option-3-0' })).toBeUndefined()
-  // The decisions are still there.
-  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
-})
-
-test('a button without its own text sends its label; an own answer works too', async ($, on) => {
-  const sent = setup(on)
-
-  await $.tool.call(WRAP_UP)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  await ui.input({ key: 'remark-0', text: 'run the tests first' })
-  expect(sent).toEqual(['On your question "Shall I commit it?": run the tests first'])
-  await ui.redraw()
-  expect(await ui.find({ key: 'option-0-1' })).toBeUndefined()
-
-  await $.tool.call(WRAP_UP)
-  await ui.redraw()
-  await ui.press({ key: 'option-0-1' })
-  expect(sent.at(-1)).toBe('No')
-})
-
-test('a new end question replaces the previous one; new decisions leave the question', async ($, on) => {
+test("the next-step box's question stays out of the bar; the decisions stay", async ($, on) => {
   setup(on)
 
-  await $.tool.call(WRAP_UP)
-  await $.tool.call({ ...WRAP_UP, ask: 'Second question?' })
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const res = await $.tool.call(WRAP_UP)
+  // The call reaches the desktop app (here the stand-in) unchanged.
+  expect(res.result).toBe('ok')
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'Shall I commit it?' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'Second question?' })).toBeDefined()
   expect(await ui.find({ key: 'agree-2' })).toBeDefined()
+  expect(await ui.find({ key: 'agree-3' })).toBeUndefined()
 })
 
-test('an end question without answer buttons does not come into the bar', async ($, on) => {
-  setup(on)
-
-  await $.tool.call({ tool: 'mcp__ccd_turn__wrap_up', recap: 'Done.' })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await ui.find({ key: 'hide' })).toBeUndefined()
+test('Claude is told to leave the next-step question out while the bar has open decisions', async ($, on) => {
+  // What sits below the plugin: an engine that composes no sections of its own.
+  on('prompt.compose', () => ({ sections: [] }))
+  const composed = await $.prompt.compose({
+    model: 'claude-opus-5-5',
+    promptModel: 'claude-opus-5-5',
+    surfaces: ['desktop'],
+    tools: [],
+    outputStyle: null,
+    traits: [],
+  } as Parameters<typeof $.prompt.compose>[0])
+  const text = composed.sections.map(sec => sec.text).join('\n')
+  expect(text).toContain('leave `ask` and `actions` out of `wrap_up`')
 })
 
 test('a remark without a decision: confirmation in the row, and not sent twice', async ($, on) => {
@@ -389,17 +352,6 @@ test('a decision after an earlier remark is sent normally', async ($, on) => {
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-0', text: 'hmm' })
   expect(sent).toEqual(['T1 (no decision yet)\n↳ Remark: hmm', 'T1 agree: tea on Tuesday\n↳ Remark: hmm'])
-})
-
-test("answered in the app's own box: the question also leaves the bar", async ($, on) => {
-  setup(on)
-
-  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  await $.tool.call(WRAP_UP)
-  await $.prompt.submit({ text: 'Yes, commit it.' } as Parameters<typeof $.prompt.submit>[0])
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: 'Shall I commit it?' })).toBeUndefined()
-  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
 })
 
 test('after Hide: a row with Restore brings everything back, with choices and remarks', async ($, on) => {
@@ -1045,16 +997,17 @@ test('a translation may use joiners and be longer, but not turn text around', as
 
 // mergeProposals on its own: how a tool call's proposals join the rows already in the bar.
 const row = (label: string, text: string, d: Row['d'] = null, r = ''): Row => ({ p: { label, text }, d, r })
-const QUESTION: Row = {
+// A question as 1.2.9 copied it from the next-step box into the bar.
+const QUESTION = {
   p: { label: 'Question', text: 'Commit?', options: [{ label: 'Yes', text: 'Yes, commit' }] },
   d: null,
   r: 'later',
-}
+} as Row
 
-test('merge: new labels go before a mirrored question; existing rows keep choice and remark', () => {
-  const before = [row('T1', 'tea', 'agree', 'hot'), QUESTION]
+test('merge: new labels go at the end; existing rows keep choice and remark', () => {
+  const before = [row('T1', 'tea', 'agree', 'hot')]
   const merged = mergeProposals(before, [{ label: 'T1', text: 'tea' }, { label: 'T2', text: 'penguin' }], new Set(), [])
-  expect(merged.rows).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin'), QUESTION])
+  expect(merged.rows).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin')])
   expect(merged.added).toEqual(['T2'])
   expect(merged.updated).toEqual([])
   expect(merged.removed).toEqual([])
@@ -1068,15 +1021,10 @@ test('merge: an updated proposal starts again without its choice and its remark'
   expect(merged.added).toEqual([])
 })
 
-test('merge: remove takes out rows that were there, not a label proposed in the same call or a question', () => {
-  const before = [row('T1', 'tea', 'agree'), row('T2', 'penguin'), QUESTION]
-  const merged = mergeProposals(
-    before,
-    [{ label: 'T3', text: 'four legs' }],
-    new Set(['T1', 'T3', 'Question', 'gone']),
-    [],
-  )
-  expect(merged.rows).toEqual([row('T2', 'penguin'), row('T3', 'four legs'), QUESTION])
+test('merge: remove takes out rows that were there, not a label proposed in the same call', () => {
+  const before = [row('T1', 'tea', 'agree'), row('T2', 'penguin')]
+  const merged = mergeProposals(before, [{ label: 'T3', text: 'four legs' }], new Set(['T1', 'T3', 'gone']), [])
+  expect(merged.rows).toEqual([row('T2', 'penguin'), row('T3', 'four legs')])
   expect(merged.removed).toEqual(['T1'])
   expect(merged.added).toEqual(['T3'])
 })
@@ -1093,4 +1041,9 @@ test('merge: a label the user hid is skipped, and the rows passed in are left as
   expect(merged.rows).toEqual([row('T1', 'coffee')])
   expect(merged.skipped).toEqual(['T2'])
   expect(before).toEqual(copy)
+})
+
+test('a question copied by 1.2.9 goes; decisions keep choice and remark', () => {
+  const before = [row('T1', 'tea', 'agree', 'hot'), QUESTION, row('T2', 'penguin')]
+  expect(withoutQuestions(before)).toEqual([row('T1', 'tea', 'agree', 'hot'), row('T2', 'penguin')])
 })

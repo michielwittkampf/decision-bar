@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — 2026-10-26
+
+- The question of the desktop app's next-step box is no longer copied into the bar. The app hides
+  the bar while that box asks something, so the copy only appeared once the question was
+  answered, and could then stay. A copied question still in a session goes when it starts.
+- Claude is told to leave the question out of the next-step box while decisions are open, and to
+  put it in the bar instead, so the bar stays in sight.
+
 ## 1.2.9 — 2026-10-24
 
 - Internal: the bar's state is one list of rows instead of three lists kept in step, the tool

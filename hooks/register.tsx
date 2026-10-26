@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Decision, LastHidden, Option, Proposal, Row } from '../types'
+import type { Decision, LastHidden, Proposal, Row } from '../types'
 
 const TOOL = 'decisions'
 const TOOL_FULL = 'mcp__decision-bar__decisions'
@@ -35,7 +35,6 @@ const sentAnswerRemarks = atom({ plugin: 'decision-bar', key: 'answeredRemarks' 
 // `{name}` is filled in; a translation must keep the same `{names}`.
 const EN = {
   heading: 'Decisions',
-  question: 'Question',
   agree: 'agree',
   disagree: 'disagree',
   open: '{n} open',
@@ -43,7 +42,6 @@ const EN = {
   decided: '{n} decided',
   and: 'and',
   remarkField: 'remark (optional)',
-  answerField: 'or type your own answer',
   send: 'send',
   remarkSent: '✓ remark sent',
   sendAll: 'Send all',
@@ -57,12 +55,10 @@ const EN = {
   restore: 'Restore',
   close: 'Close',
   closed: 'closed',
-  nothingToSendAnswer: 'Nothing to send: type an answer first.',
   nothingToSendDecision: 'Nothing to send: choose agree or disagree, or type a remark.',
   messageDecision: '{label} {decision}: {proposal}',
   undecided: '{label} (no decision yet)',
   messageRemark: 'Remark: {remark}',
-  messageQuestion: 'On your question "{question}": {answer}',
   commandRestored: '{n} decision(s) back above the prompt.',
   commandEmpty: 'No hidden decisions to restore.',
 } as const
@@ -241,11 +237,10 @@ const breakLongWords = (text: string, width: number, soft: boolean) =>
     })
     .join(' ')
 
-// Decided is agree / disagree, or a typed answer to a question; the rest is open. Remarks count
-// only on decisions: on a question the text is the answer itself.
+// Decided is agree or disagree; the rest is open.
 const tally = (list: Row[]) => {
-  const decided = list.filter(row => (row.p.options ? !!row.r.trim() : row.d !== null)).length
-  const withRemark = list.filter(row => !row.p.options && !!row.r.trim()).length
+  const decided = list.filter(row => row.d !== null).length
+  const withRemark = list.filter(row => !!row.r.trim()).length
   return { open: list.length - decided, decided, withRemark }
 }
 
@@ -279,7 +274,8 @@ const INSTRUCTIONS = [
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
   'If the tool result starts a sentence with "Not visible", the user cannot see the bar in this session (for example a side chat in the desktop app): ask those decisions in your reply as well, with the same labels, and do not say they are in the bar.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
-  'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only when the bar would show in the wrong language: (1) right before you end a turn with a question and answer buttons in the next-step box (the bar copies it) while the chat is not in the bar language, or (2) at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead. Not when the tool result says "Not visible": then the box is the place to ask.',
+  'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
   'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>" or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
   'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
 ].join('\n')
@@ -287,9 +283,6 @@ const INSTRUCTIONS = [
 // One line (with any remark below it) per proposal; empty when there is nothing to report.
 const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: string | undefined) => {
   const r = remark?.trim() ?? ''
-  if (p.options) {
-    return r ? t('messageQuestion', { question: p.text, answer: r }) : ''
-  }
   if (decision === null) {
     // The remark always goes on its own line, so it is never mistaken for the proposal.
     return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
@@ -329,38 +322,40 @@ const parseProposals = (input: unknown): Proposal[] =>
 
 // A tool call's proposals merged into the bar's rows. Existing rows keep their choice and remark;
 // an updated proposal (other text) starts again without either, so a remark written for the old
-// text does not go out with the new one. New labels are added, before a mirrored question. A label
-// the user hid is skipped. `remove` takes out rows that were in the bar; a label proposed in this
-// same call stays. Exported for its tests.
+// text does not go out with the new one. New labels are added at the end. A label the user hid is
+// skipped. `remove` takes out rows that were in the bar; a label proposed in this same call stays.
+// Exported for its tests.
 export const mergeProposals = (rows: Row[], incoming: Proposal[], toRemove: Set<string>, hidden: string[]) => {
   const skipped = incoming.filter(p => hidden.includes(p.label)).map(p => p.label)
   const admitted = incoming.filter(p => !hidden.includes(p.label))
-  const removed = rows.filter(row => !row.p.options && toRemove.has(row.p.label)).map(row => row.p.label)
+  const removed = rows.filter(row => toRemove.has(row.p.label)).map(row => row.p.label)
   // A new array: the rows passed in are left as they are.
-  const merged = rows.filter(row => row.p.options || !toRemove.has(row.p.label))
+  const merged = rows.filter(row => !toRemove.has(row.p.label))
   const updated: string[] = []
   const added: string[] = []
   for (const p of admitted) {
-    const at = merged.findIndex(row => !row.p.options && row.p.label === p.label)
+    const at = merged.findIndex(row => row.p.label === p.label)
     if (at === -1) {
       added.push(p.label)
-      const question = merged.findIndex(row => row.p.options)
-      merged.splice(question === -1 ? merged.length : question, 0, { p, d: null, r: '' })
+      merged.push({ p, d: null, r: '' })
     } else if (merged[at]!.p.text !== p.text) {
       merged[at] = { p, d: null, r: '' }
       updated.push(p.label)
     }
   }
   // No limit: a decision only leaves the bar when it is sent, hidden or removed.
-  const kept = [...merged.filter(row => !row.p.options), ...merged.filter(row => row.p.options)]
-  return { rows: kept, added, updated, removed, skipped }
+  return { rows: merged, added, updated, removed, skipped }
 }
+
+// Up to 1.2.9 the bar copied the question of the desktop app's next-step box into a row of its
+// own, with `options`. Such a row in a session's state goes. Exported for its tests.
+export const withoutQuestions = (list: Row[]) => list.filter(row => !('options' in row.p))
 
 // Hide: out of the bar, and the labels of the decisions remembered.
 const hide = async ($: EngineInterface) => {
   await commitDrafts($)
   const list = await read($, rows)
-  const labels = list.filter(row => !row.p.options).map(row => row.p.label)
+  const labels = list.map(row => row.p.label)
   await update($, hiddenLabels, old => [...new Set([...old, ...labels])])
   await update($, lastHidden, () => ({ rows: list, show: true }))
   await clear($)
@@ -375,14 +370,8 @@ const restore = async ($: EngineInterface): Promise<number> => {
     return 0
   }
   const now = await read($, rows)
-  const back = hidden.rows.filter(
-    row => !now.some(n => (row.p.options ? n.p.options && n.p.text === row.p.text : !n.p.options && n.p.label === row.p.label)),
-  )
-  const merged = [
-    ...back.filter(row => !row.p.options),
-    ...now.filter(row => !row.p.options),
-    ...[...back, ...now].filter(row => row.p.options),
-  ]
+  const back = hidden.rows.filter(row => !now.some(n => n.p.label === row.p.label))
+  const merged = [...back, ...now]
   const labels = hidden.rows.map(row => row.p.label)
   await update($, hiddenLabels, old => old.filter(l => !labels.includes(l)))
   await update($, rows, () => merged)
@@ -401,14 +390,14 @@ const clear = async ($: EngineInterface) => {
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
   await commitDrafts($)
   const stored = await read($, rows)
-  const list = agreeToAll ? stored.map((row): Row => ({ ...row, d: row.p.options ? null : 'agree' })) : stored
+  const list = agreeToAll ? stored.map((row): Row => ({ ...row, d: 'agree' })) : stored
   const sentBefore = await read($, sentRemarks)
   const t = await currentTranslator($)
   // Only a remark, and exactly that one was sent already: not again.
   const alreadySent = (i: number) => {
     const row = list[i]
     const r = row?.r.trim() ?? ''
-    return !!row && !row.p.options && row.d === null && r !== '' && sentBefore[rowKey(row.p)] === r
+    return !!row && row.d === null && r !== '' && sentBefore[rowKey(row.p)] === r
   }
   const lines = indexes
     .filter(i => !alreadySent(i))
@@ -420,8 +409,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   }
 
   const sent = new Set(indexes)
-  const answered = (row: Row) => row.d !== null || (row.p.options !== undefined && !!row.r.trim())
-  const stays = (i: number) => !sent.has(i) || !answered(list[i]!)
+  const stays = (i: number) => !sent.has(i) || list[i]!.d === null
   const keep = list.map((_, i) => i).filter(stays)
   await update($, rows, () => keep.map(i => (sent.has(i) ? { ...list[i]!, r: '' } : list[i]!)))
   await update($, sentRemarks, old => {
@@ -439,7 +427,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     const recorded: Record<string, 'agree' | 'disagree'> = { ...(old as Record<string, 'agree' | 'disagree'>) }
     for (const i of indexes) {
       const row = list[i]
-      if (row && !row.p.options && row.d !== null) {
+      if (row && row.d !== null) {
         recorded[rowKey(row.p)] = row.d
       }
     }
@@ -450,7 +438,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     for (const i of indexes) {
       const row = list[i]
       const r = row?.r.trim() ?? ''
-      if (row && !row.p.options && row.d !== null && r !== '') {
+      if (row && row.d !== null && r !== '') {
         recorded[rowKey(row.p)] = r
       }
     }
@@ -463,39 +451,6 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   // A blank line between answers, so each stands on its own in the chat.
   await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
-}
-
-// An answer button of a question: sends that text (with the remark below it) and removes only
-// that question. Only on the user's press, and the text is what the same button in the desktop
-// app's own next-step box would send; see `send` for why it goes as the user.
-const pickOption = async ($: EngineInterface, i: number, option: Option) => {
-  await commitDrafts($)
-  const r = (await read($, rows))[i]?.r.trim() ?? ''
-  const t = await currentTranslator($)
-  await update($, rows, old => old.filter((_, j) => j !== i))
-  await $.prompt.submit({
-    text: (r ? `${option.text}\n${INDENT}${t('messageRemark', { remark: r })}` : option.text) + TRAILER,
-    asUser: true,
-  })
-}
-
-// The question and answer buttons from the desktop app's next-step box (wrap_up). Buttons that
-// are an app action (commit, PR, ...) have no text and are left out.
-const questionFromWrapUp = (e: object): Proposal | null => {
-  const { ask, actions } = e as { ask?: unknown; actions?: unknown }
-  if (typeof ask !== 'string' || ask.trim() === '' || !Array.isArray(actions)) {
-    return null
-  }
-  const options = actions
-    .filter(a => a && typeof a === 'object' && !('action' in a && a.action))
-    .map(a => a as { label?: unknown; message?: unknown })
-    .filter(a => typeof a.label === 'string' && oneLine(a.label, MAX_LABEL) !== '')
-    .map(a => {
-      const label = oneLine(a.label as string, MAX_LABEL)
-      const message = typeof a.message === 'string' ? oneLine(a.message, MAX_PROPOSAL) : ''
-      return { label, text: message || label }
-    })
-  return options.length > 0 ? { label: 'Question', text: oneLine(ask, MAX_PROPOSAL), options } : null
 }
 
 // The language of a call: sets the bar's texts, adds what a translation that came with it still
@@ -569,7 +524,6 @@ type RowView = Elements & {
   setRemark: (i: number, text: string) => Promise<void>
   keepAndSend: (i: number, text: string) => Promise<void>
   choose: (i: number, decision: Exclude<Decision, null>) => Promise<unknown>
-  pick: (i: number, option: Option) => Promise<void>
   roomy: boolean
   labelText: (p: Proposal) => string
   labelWidth: number
@@ -626,7 +580,7 @@ const rowView = async (
     }
     const done = await send($, [i])
     if (!done) {
-      $.ui.toast(stored[i]?.p.options ? t('nothingToSendAnswer') : t('nothingToSendDecision'))
+      $.ui.toast(t('nothingToSendDecision'))
     }
   }
   // Pressing the chosen state again sets it back to "no decision".
@@ -634,18 +588,15 @@ const rowView = async (
     commitDrafts($).then(() =>
       update($, rows, old => old.map((row, j) => (j === i ? { ...row, d: row.d === decision ? null : decision } : row))),
     )
-  const pick = (i: number, option: Option) => pickOption($, i, option)
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
   const roomy = surface !== 'terminal'
-  // A question from the next-step box is called "Question" in the bar's language.
-  const shownLabel = (p: Proposal) => (p.options ? t('question') : p.label)
   // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
   // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
-  const labelWidth = Math.min(14, Math.max(0, ...shown.map(p => [...shownLabel(p)].length)) + 2)
+  const labelWidth = Math.min(14, Math.max(0, ...shown.map(p => [...p.label].length)) + 2)
   // A word longer than the column is broken with a hyphen. Outside the terminal soft hyphens let
   // the app break only where proportional text really needs it; the terminal gets hard breaks.
-  const labelText = (p: Proposal) => breakLongWords(shownLabel(p), labelWidth - 1, roomy)
+  const labelText = (p: Proposal) => breakLongWords(p.label, labelWidth - 1, roomy)
   // The field as wide as the line allows next to the buttons before it and "send" after it. The
   // desktop app draws an Input at its own width; this only takes effect in the terminal.
   const fieldWidth = (buttons: string[]) =>
@@ -655,12 +606,12 @@ const rowView = async (
     )
   return {
     Box, Button, Text, Input, t, prefix, stored, current, sent, showFull, isStale,
-    setRemark, keepAndSend, choose, pick, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
+    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
   }
 }
 
-// The top line of every row: the label in its column, and the proposal or question next to it.
-const rowTop = (v: RowView, p: Proposal, i: number, kind: 'proposal' | 'question') => {
+// The top line of every row: the label in its column, and the proposal next to it.
+const rowTop = (v: RowView, p: Proposal, i: number) => {
   const { Box, Text, prefix: k } = v
   return (
     <Box key={`${k}top-${i}`} flexDirection="row" alignItems="flex-start" columnGap={1}>
@@ -669,15 +620,15 @@ const rowTop = (v: RowView, p: Proposal, i: number, kind: 'proposal' | 'question
           {v.labelText(p)}
         </Text>
       </Box>
-      <Box key={`${k}${kind}-box-${i}`} flexGrow={1} flexShrink={1}>
-        <Text key={`${k}${kind}-${i}`}>{p.text}</Text>
+      <Box key={`${k}proposal-box-${i}`} flexGrow={1} flexShrink={1}>
+        <Text key={`${k}proposal-${i}`}>{p.text}</Text>
       </Box>
     </Box>
   )
 }
 
-// The remark field, or for a question the field for an own answer. Enter or its button sends only
-// this row; the rest stays. `buttons` stand before it on the line and fix its width.
+// The remark field. Enter or its button sends only this row; the rest stays. `buttons` stand
+// before it on the line and fix its width.
 const remarkField = (v: RowView, i: number, placeholder: string, buttons: string[]) => {
   const { Box, Input, prefix: k } = v
   return (
@@ -719,7 +670,7 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
   return (
     // Outside the terminal some air around the buttons, and clearly more between rows.
     <Box key={`${k}row-${i}`} flexDirection="column" rowGap={v.roomy ? 1 : 0} marginTop={v.roomy && i > 0 ? 1 : 0}>
-      {rowTop(v, p, i, 'proposal')}
+      {rowTop(v, p, i)}
       <Box
         key={`${k}choice-${i}`}
         flexDirection="row"
@@ -751,37 +702,6 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
             {t('remarkSent')}
           </Text>
         )}
-      </Box>
-      {fullRemark(v, p, i)}
-    </Box>
-  )
-}
-
-// A question from the next-step box, in the same columns as the decisions: "Question" in the label
-// column, the question next to it, and the answers below, indented to under the question.
-const questionRow = (v: RowView, p: Proposal, i: number) => {
-  const { Box, Button, prefix: k } = v
-  const options = p.options ?? []
-  return (
-    <Box key={`${k}row-${i}`} flexDirection="column" rowGap={1} marginTop={i > 0 ? 1 : 0}>
-      {rowTop(v, p, i, 'question')}
-      <Box
-        key={`${k}options-${i}`}
-        flexDirection="row"
-        alignItems="center"
-        flexWrap="wrap"
-        columnGap={1}
-        marginLeft={v.labelWidth + 1}
-      >
-        {options.map((o, n) => (
-          <Button
-            key={`${k}option-${i}-${n}`}
-            label={o.label}
-            variant={n === 0 ? 'primary' : 'secondary'}
-            onPress={() => v.pick(i, o)}
-          />
-        ))}
-        {remarkField(v, i, v.t('answerField'), options.map(o => o.label))}
       </Box>
       {fullRemark(v, p, i)}
     </Box>
@@ -825,9 +745,6 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
   const summary = current
     .map(({ p, d, r }) => {
       const pen = r.trim() ? ' ✎' : ''
-      if (p.options) {
-        return `${t('question')}${pen}`
-      }
       const state = d === 'agree' ? '✓' : d === 'disagree' ? '✗' : '○'
       return `${p.label} ${state}${pen}`
     })
@@ -855,7 +772,6 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
 const expandedBar = ($: EngineInterface, v: RowView) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
-  const decisionCount = stored.filter(row => !row.p.options).length
   // "Send all" is always there: typing a remark alone does not redraw the bar, so the button
   // would otherwise appear only after another action.
   const sendAll = async () => {
@@ -874,12 +790,10 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
       {/* Outside the terminal the chevron sits a little to the right because of the button's
           border: the content moves one cell along so it lines up below it. */}
       <Box key="content" flexDirection="column" rowGap={1} marginLeft={v.roomy ? 1 : 0}>
-        {stored.map(({ p }, i) => (p.options ? questionRow(v, p, i) : decisionRow(v, p, i)))}
+        {stored.map(({ p }, i) => decisionRow(v, p, i))}
         <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
           <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
-          {decisionCount > 0 && (
-            <Button key="agree-all" label={t(decisionCount === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
-          )}
+          <Button key="agree-all" label={t(stored.length === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
           <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
         </Box>
       </Box>
@@ -893,6 +807,15 @@ export const register: Register = on => {
   drawnOn = new Set()
 
   on('session.start', async ($, e, next) => {
+    // A question copied by 1.2.9 goes once (see `withoutQuestions`); other rows stay as they are.
+    await update($, rows, old => {
+      const kept = withoutQuestions(old)
+      return kept.length < old.length ? kept : old
+    }).catch(() => undefined)
+    await update($, lastHidden, last => {
+      const kept = last ? withoutQuestions(last.rows) : []
+      return last && kept.length < last.rows.length ? { ...last, rows: kept } : last
+    }).catch(() => undefined)
     await $.tool.register({
       name: TOOL,
       description:
@@ -959,21 +882,8 @@ export const register: Register = on => {
 
   // No matcher on the exact name: the engine may report the tool with a prefix.
   // This hook answers one tool itself: `decisions`, the tool this mod registers, which has nothing
-  // else behind it (`isOurTool`). Of the desktop app's wrap_up it only reads the question and its
-  // buttons, then lets the call run. Every other tool call passes through untouched.
+  // else behind it (`isOurTool`). Every other tool call passes through untouched.
   on('tool.call', async ($, e, next) => {
-    if (e.tool.includes('ccd_turn') && e.tool.endsWith('__wrap_up')) {
-      // The previous mirrored question makes way for the new one; decisions stay.
-      const question = questionFromWrapUp(e)
-      if (question) {
-        await commitDrafts($).catch(() => undefined)
-        await update($, rows, old => [...old.filter(row => !row.p.options), { p: question, d: null, r: '' }]).catch(
-          () => undefined,
-        )
-      }
-      return next(e)
-    }
-
     if (!isOurTool(e.tool)) {
       return next(e)
     }
@@ -998,7 +908,7 @@ export const register: Register = on => {
       await update($, rows, () => keep)
 
       const sentence = (head: string, labels: string[]) => (labels.length > 0 ? `${head}: ${labels.join(', ')}.` : '')
-      const open = keep.filter(row => !row.p.options).map(row => row.p.label)
+      const open = keep.map(row => row.p.label)
       const visible = await isVisible($)
       return {
         result: [
@@ -1034,23 +944,11 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Answered in the app's own box: the message is exactly the text of one of the answer buttons.
-  // Then the mirrored question no longer belongs in the bar.
+  // A message of the user's own: the Restore row and what was typed in the bar are settled.
   on('prompt.submit', async ($, e, next) => {
     // The "hidden — Restore" row belongs to the moment of hiding; /decisions keeps working.
     await update($, lastHidden, last => (last && last.show ? { ...last, show: false } : last)).catch(() => undefined)
     await commitDrafts($).catch(() => undefined)
-    const text = e.text.trim()
-    await read($, rows)
-      .then(async list => {
-        const answered = list.map((row, i) => (row.p.options?.some(o => o.text === text) ? i : -1)).filter(i => i >= 0)
-        if (answered.length === 0) {
-          return
-        }
-        await update($, rows, old => old.filter((_, i) => !answered.includes(i)))
-      })
-      .catch(() => undefined)
-
     return next(e)
   })
 
@@ -1093,7 +991,7 @@ export const register: Register = on => {
     const { Box, Button, Text, t } = v
     const done = await read($, sentDecisions)
     const doneRemarks = await read($, sentAnswerRemarks)
-    const indexOf = (p: Proposal) => list.findIndex(row => !row.p.options && rowKey(row.p) === rowKey(p))
+    const indexOf = (p: Proposal) => list.findIndex(row => rowKey(row.p) === rowKey(p))
     const openIndexes = asked.map(indexOf).filter(i => i >= 0)
     const openRows = openIndexes.map(i => v.current[i]!)
     const sendBox = async () => {
@@ -1159,9 +1057,7 @@ export const register: Register = on => {
     drawnOn.add(e.surface)
     const list = await read($, rows)
 
-    // Also visible while Claude works (a sent message then waits until the turn is done) and while
-    // the app holds the spot (`hasSurvey`): otherwise the bar disappears the moment the next-step
-    // box appears, which is exactly when it is needed.
+    // Also visible while Claude works: a sent message then waits until the turn is done.
     const table = $.ui.resolve(e) as Elements
     if (list.length === 0) {
       const hidden = await read($, lastHidden)

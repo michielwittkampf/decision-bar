@@ -1,6 +1,6 @@
 {
   "name": "decision-bar",
-  "version": "1.2.9",
+  "version": "1.3.0",
   "description": "Work through (many) decisions without losing track, at your own pace and in your own order. Every decision Claude asks for shows in one bar above the prompt and in context in the chat, kept in sync. Each stays open until you answer it or it no longer applies; agree, disagree or add a remark.",
   "author": {
     "name": "Michiel Wittkampf",

@@ -71,23 +71,23 @@ The short version is in [PRIVACY.md](PRIVACY.md); the details are below.
 
 - **Instructions for Claude.** Each turn the mod adds one section to what Claude is told
   (`prompt.compose`): when to put decisions in the bar, how to word them, and the form the answers
-  come back in. It leaves everything else Claude is told as it is.
+  come back in. While decisions are open, it also asks Claude to leave the question out of the
+  desktop app's next-step box and to put it in the bar instead: the app hides the bar while that
+  box asks something. It leaves everything else Claude is told as it is.
 - **Its own tool.** The mod registers the `decisions` tool and answers it itself (`tool.call`):
   it puts the proposals in the bar and tells Claude which decisions are open, whether you can see
   the bar, and, for a new chat language, which of the bar's texts to translate. Every other tool
-  call passes through unchanged. Of those, it only reads the question and answer buttons of the
-  desktop app's next-step box, to show that question in the bar as well.
-- **What it sends as you.** Only when you click Send, Send all, Agree to all or an answer button,
-  or press Enter in a remark field, does the mod submit a message in your name
-  (`$.prompt.submit`), to the same conversation. It holds your answers and what they answer: a
-  line per decision, `<label> <agree|disagree>: <proposal>` or `<label> (no decision yet)`, with
-  your remark on its own line below; for a question, the text of the button you picked, with your
-  remark. Label and proposal are the ones Claude put in the bar, each cut to one plain line of
-  limited length, without invisible characters (joiners and direction marks that scripts and
-  emoji need stay), and a label cannot start with `/`, `!` or `@`. Agree, disagree and remark
+  call passes through unchanged.
+- **What it sends as you.** Only when you click Send, Send all or Agree to all, or press Enter in a
+  remark field, does the mod submit a message in your name (`$.prompt.submit`), to the same
+  conversation. It holds your answers and what they answer: a line per decision,
+  `<label> <agree|disagree>: <proposal>` or `<label> (no decision yet)`, with your remark on its
+  own line below. Label and proposal are the ones Claude put in the bar, each cut to one plain
+  line of limited length, without invisible characters (joiners and direction marks that scripts
+  and emoji need stay), and a label cannot start with `/`, `!` or `@`. Agree, disagree and remark
   follow the chat language; the line shape itself is fixed.
 - **Your own prompts** (`prompt.submit`, `prompt.edit`) are only read to keep a remark you were
-  typing, and to take a question off the bar when you typed one of its answers yourself.
+  typing.
 - **The `/decisions` command** (`command.run`) brings the decisions you hid last back into the bar.
 - **What it keeps.** Decisions, choices and remarks live in the session's state; a proposal Claude
   changes starts again without its choice and remark. The bar's texts in each language Claude

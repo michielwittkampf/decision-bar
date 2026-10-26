@@ -1,7 +1,5 @@
-export type Option = { label: string; text: string }
-// A decision (agree / disagree) or, with `options`, a question from the desktop app's next-step
-// box, with that box's answer buttons.
-export type Proposal = { label: string; text: string; options?: Option[] }
+// A decision Claude proposes: its label and the proposal in one sentence.
+export type Proposal = { label: string; text: string }
 export type Decision = 'agree' | 'disagree' | null
 // A row of the bar: the proposal with its choice and remark.
 export type Row = { p: Proposal; d: Decision; r: string }
