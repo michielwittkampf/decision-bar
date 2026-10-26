@@ -1,14 +1,22 @@
 # Changelog
 
-## 1.4.0 — unreleased
+## 1.5.0 — unreleased
 
 - Answers of its own: Claude can give a decision two to four answers ("Commit now", "Run the
   tests first", "Not yet") in place of agree and disagree: two as buttons, three or four as one
   menu (buttons on mobile). You choose one and send it as any decision; the line sent is
   `<label> → <answer>: <proposal>`, the answer exactly as shown. Agree to all leaves those
   decisions as they are. Design: `docs/answer-buttons.md`.
-- Claude is told to put a closing question with such answers in the bar, rather than in the
-  desktop app's next-step box, while decisions are open.
+- Claude is told to give a question it asks in the bar its answers as `options` when they are
+  not agree or disagree.
+
+## 1.4.0 — 2026-10-26
+
+- The question Claude ends a turn with goes in the bar whenever the bar can be seen, also when no
+  other decisions are open, instead of in the desktop app's next-step box. There it stays until
+  you answer it; the box's question is gone once you send anything else, and while the box asks,
+  the app hides the bar. A setting, `closingQuestionInBar` (on by default), turns this back to
+  1.3.0's rule: only while decisions are open.
 
 ## 1.3.0 — 2026-10-26
 

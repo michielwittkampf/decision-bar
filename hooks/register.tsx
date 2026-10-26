@@ -267,7 +267,18 @@ const miniSummary = (t: Translate, list: Row[]) => {
   return parts.join(` ${t('and')} `) + (withRemark > 0 ? `${SEPARATOR}${withRemark} ✎` : '')
 }
 
-const INSTRUCTIONS = [
+// Where Claude asks the question it ends a turn with. The desktop app hides the bar while its
+// next-step box (`wrap_up`) asks something, and that box's question is gone once the user sends
+// anything else. With the setting `closingQuestionInBar` on (the default) the question goes in the
+// bar whenever the bar can be seen; off, only while decisions are open, so the bar is not hidden.
+const CLOSING_QUESTION_ALWAYS =
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons, and that question is gone once the user sends anything else. So while the bar can be seen, put the question you end your turn with in the bar as a decision, with its answers as `options` when they are not agree or disagree, also when no other decisions are open, and leave `ask` and `actions` out of `wrap_up`. Not when the tool result says "Not visible": then the box is the place to ask.'
+const CLOSING_QUESTION_WHILE_OPEN =
+  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not when the tool result says "Not visible": then the box is the place to ask.'
+
+// What Claude is told about the bar, with the closing-question rule the setting picks. Exported for
+// its tests.
+export const instructions = (questionInBar: boolean) => [
   '# Decision bar',
   `When you ask the user for one or more decisions you propose (for example decision point C13, or "shall I do X?"), put them in the bar above the input field with ${TOOL_FULL} at the end of your turn.`,
   '- `language`: the language of the chat as an ISO 639-1 code (en, nl, de, …). The bar shows its own texts in that language; the answers come back in it too.',
@@ -281,7 +292,7 @@ const INSTRUCTIONS = [
   'A label the user hid does not come back; the tool result says which. Only ask about it again in your text when really needed.',
   'If the tool result starts a sentence with "Not visible", the user cannot see the bar in this session (for example a side chat in the desktop app): ask those decisions in your reply as well, with the same labels, and do not say they are in the bar.',
   'If the tool result asks for the bar texts in the chat language, call it again right away with `language` and `translation` as it says, before ending your turn.',
-  'The desktop app hides the bar while its next-step box (`wrap_up`) shows a question with answer buttons. So when the bar has open decisions at the end of your turn, leave `ask` and `actions` out of `wrap_up`: put the question you would ask there in the bar as a decision instead, with its answers as `options` when they are not agree or disagree. Not when the tool result says "Not visible": then the box is the place to ask.',
+  questionInBar ? CLOSING_QUESTION_ALWAYS : CLOSING_QUESTION_WHILE_OPEN,
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
   'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>", "<label> → <answer>: <proposal>" (one of its own answers) or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
   'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
@@ -893,7 +904,9 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // A setting of the plugin (`userConfig` in plugin.json); on unless turned off.
+  const questionInBar = options?.closingQuestionInBar !== false
   drafts = new Map()
   lastField = undefined
   drawnOn = new Set()
@@ -967,14 +980,14 @@ export const register: Register = on => {
     return { text: count > 0 ? t('commandRestored', { n: count }) : t('commandEmpty') }
   })
 
-  // Adds one section of its own, INSTRUCTIONS: how Claude uses the bar. Everything else Claude is
+  // Adds one section of its own, `instructions`: how Claude uses the bar. Everything else Claude is
   // told passes through unchanged. README: "What the mod does".
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
 
     return {
       ...composed,
-      sections: [...composed.sections, { id: 'decision-bar:instructions', text: INSTRUCTIONS, scope: 'session' }],
+      sections: [...composed.sections, { id: 'decision-bar:instructions', text: instructions(questionInBar), scope: 'session' }],
     }
   })
 

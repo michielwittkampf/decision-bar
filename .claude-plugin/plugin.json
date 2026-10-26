@@ -1,6 +1,6 @@
 {
   "name": "decision-bar",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Work through (many) decisions without losing track, at your own pace and in your own order. Every decision Claude asks for shows in one bar above the prompt and in context in the chat, kept in sync. Each stays open until you answer it or it no longer applies; agree, disagree or add a remark.",
   "author": {
     "name": "Michiel Wittkampf",
@@ -13,5 +13,13 @@
   "privacyPolicyUrl": "https://github.com/michielwittkampf/decision-bar/blob/main/PRIVACY.md",
   "termsOfServiceUrl": "https://github.com/michielwittkampf/decision-bar/blob/main/LICENSE",
   "keywords": ["decisions", "mod", "workflow", "review", "prompt"],
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "closingQuestionInBar": {
+      "type": "boolean",
+      "title": "Closing question in the bar",
+      "description": "Claude puts the question it ends a turn with in the bar, where it stays until you answer it, instead of in the desktop app's next-step box. Off: only while decisions are open in the bar.",
+      "default": true
+    }
+  }
 }

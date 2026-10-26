@@ -73,9 +73,11 @@ The short version is in [PRIVACY.md](PRIVACY.md); the details are below.
 
 - **Instructions for Claude.** Each turn the mod adds one section to what Claude is told
   (`prompt.compose`): when to put decisions in the bar, how to word them, and the form the answers
-  come back in. While decisions are open, it also asks Claude to leave the question out of the
-  desktop app's next-step box and to put it in the bar instead: the app hides the bar while that
-  box asks something. It leaves everything else Claude is told as it is.
+  come back in. It also asks Claude to put the question it ends a turn with in the bar rather than
+  in the desktop app's next-step box: the app hides the bar while that box asks something, and the
+  box's question is gone once you send anything else. With the setting `closingQuestionInBar` off
+  (in `/config`), only while decisions are open. It leaves everything else Claude is told as it
+  is.
 - **Its own tool.** The mod registers the `decisions` tool and answers it itself (`tool.call`):
   it puts the proposals in the bar, each with agree and disagree or with two to four answers of its
   own, and tells Claude which decisions are open, whether you can see the bar, and,
