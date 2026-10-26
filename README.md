@@ -55,8 +55,8 @@ in a side chat of the desktop app, where Claude asks in the chat instead
   `/decisions`.
 - **More than yes or no.** Agree or disagree with a remark, or send just a remark: it goes out
   with the decision it is about, so Claude knows exactly what it refers to. Where the answer is
-  not yes or no, Claude gives the decision its own answer buttons ("Commit now", "Run the tests
-  first", "Not yet").
+  not yes or no, Claude gives the decision its own answers ("Commit now", "Run the tests first",
+  "Not yet"): two as buttons, more in a menu.
 - **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
   every decision, and the conversation gets the space back.
 
@@ -105,8 +105,9 @@ Findings of the plugin directory's scan, and why they are what they are. The cod
 next to each place the scan points at.
 
 - **"Mod can read the conversation and submit a prompt."** Submitting the answers is the mod's
-  purpose. Nothing reaches the message except the label and proposal Claude put in the bar, the
-  bar's own texts and what you typed, and only on your click or Enter; no hook submits. What the
+  purpose. Nothing reaches the message except the label, proposal and chosen answer Claude put in
+  the bar, exactly as shown, the bar's own texts and what you typed, and only on your click or
+  Enter; no hook submits. What the
   mod reads (`session.surfaces`) only decides whether Claude is told to ask in its reply as well,
   and never goes into a message. See [What the mod does](#what-the-mod-does).
 

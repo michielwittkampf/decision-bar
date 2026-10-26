@@ -42,7 +42,8 @@ const NL = {
   restore: 'Terughalen',
   close: 'Sluiten',
   closed: 'gesloten',
-  nothingToSendDecision: 'Niets te versturen: kies akkoord of niet akkoord, of typ een opmerking.',
+  chooseAnswer: 'kies een antwoord',
+  nothingToSend: 'Niets te versturen: kies een antwoord, of typ een opmerking.',
   messageDecision: '{label} {decision}: {proposal}',
   undecided: '{label} (nog geen beslissing)',
   messageRemark: 'Opmerking: {remark}',
@@ -995,22 +996,24 @@ test('a translation may use joiners and be longer, but not turn text around', as
   expect((await ui.find({ key: 'hide' }))?.text).toContain('پنهان‌سازی')
 })
 
-// Answer buttons: a decision whose answers are not agree or disagree.
+// Answers of its own: a decision whose answers are not agree or disagree. Two show as buttons,
+// three or more as one menu (Select).
+const TESTS = { label: 'R2', text: 'Run the tests?', options: ['Yes', 'Later'] }
 const RELEASE = { label: 'R1', text: 'Commit the release.', options: ['Commit now', 'Run the tests first', 'Not yet'] }
 
-test('answer buttons replace agree and disagree; the chosen answer is sent as shown', async ($, on) => {
+test('two answers replace agree and disagree as buttons; the chosen one is sent as shown', async ($, on) => {
   const sent = setup(on)
 
-  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-1' })).toBeUndefined()
-  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('○ Run the tests first')
+  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('○ Later')
   // The first row keeps agree and disagree.
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
 
   await ui.press({ key: 'answer-1-1' })
   await ui.redraw()
-  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('● Run the tests first')
+  expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('● Later')
   // Pressed again: no choice.
   await ui.press({ key: 'answer-1-1' })
   await ui.redraw()
@@ -1018,28 +1021,73 @@ test('answer buttons replace agree and disagree; the chosen answer is sent as sh
 
   await ui.press({ key: 'answer-1-0' })
   await ui.input({ key: 'remark-1', text: 'after lunch' })
-  expect(sent).toEqual(['R1 → Commit now: Commit the release.\n↳ Remark: after lunch'])
+  expect(sent).toEqual(['R2 → Yes: Run the tests?\n↳ Remark: after lunch'])
   await ui.redraw()
   expect(await ui.find({ key: 'answer-1-0' })).toBeUndefined()
 })
 
-test('"Agree to all" leaves rows with answer buttons open; with only those it is not there', async ($, on) => {
+test('three or more answers are one menu; picking sets the choice, the empty entry clears it', async ($, on) => {
   const sent = setup(on)
 
-  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'answer-0-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'answers-0' })).toBeDefined()
+
+  await ui.select({ key: 'answers-0', value: '1' })
+  await ui.redraw()
+  await ui.select({ key: 'answers-0', value: '' })
+  await ui.press({ key: 'send-all' })
+  // Cleared: nothing to send.
+  expect(sent).toEqual([])
+
+  await ui.select({ key: 'answers-0', value: '2' })
+  await ui.press({ key: 'send-all' })
+  expect(sent).toEqual(['R1 → Not yet: Commit the release.'])
+})
+
+test('on mobile, without a menu, three answers stay buttons (the chat box; mobile has no band)', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
+  const row = await $.ui.mount({
+    plugin: 'decision-bar',
+    surface: 'mobile',
+    component: 'ToolUse',
+    props: {
+      tool_use_id: 'call-1',
+      tool: TOOL,
+      input: { language: 'en', proposals: [RELEASE] },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    } as unknown as RenderPropsOf['ToolUse'],
+  })
+  expect(await row.find({ type: 'Text', text: 'Commit the release.' })).toBeDefined()
+  expect(await row.find({ type: 'Select' })).toBeUndefined()
+  expect(await row.find({ key: 'chat-call-1-answers-0' })).toBeUndefined()
+  expect((await row.find({ key: 'chat-call-1-answer-0-2' }))?.text).toContain('Not yet')
+})
+
+test('"Agree to all" sends only the rows agree answers; rows with their own answers stay as they are', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  // A chosen answer and a remark on the other row do not go along.
+  await ui.press({ key: 'answer-1-0' })
+  await ui.input({ key: 'remark-1', text: 'quickly', kind: 'change' })
   // One row agree can answer: the singular label.
-  expect((await ui.find({ key: 'agree-all' }))?.text).toContain('Agree')
   expect((await ui.find({ key: 'agree-all' }))?.text).not.toContain('all')
   await ui.press({ key: 'agree-all' })
   expect(sent).toEqual(['T1 agree: tea on Tuesday'])
   await ui.redraw()
-  expect(await ui.find({ key: 'answer-0-0' })).toBeDefined()
+  expect((await ui.find({ key: 'answer-0-0' }))?.text).toContain('●')
   expect(await ui.find({ key: 'agree-all' })).toBeUndefined()
 })
 
 test('answers are two to four plain lines; fewer leaves agree and disagree', async ($, on) => {
-  setup(on)
+  const sent = setup(on)
 
   await $.tool.call({
     tool: TOOL,
@@ -1052,27 +1100,34 @@ test('answers are two to four plain lines; fewer leaves agree and disagree', asy
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
   expect(await ui.find({ key: 'answer-0-0' })).toBeUndefined()
-  // Duplicates and empty ones go, line breaks become spaces, at most four.
-  expect((await ui.find({ key: 'answer-1-2' }))?.text).toContain('three lines')
-  expect((await ui.find({ key: 'answer-1-3' }))?.text).toContain('four')
-  expect(await ui.find({ key: 'answer-1-4' })).toBeUndefined()
+  // Duplicates and empty ones go, line breaks become spaces, at most four: entry 2 is "three
+  // lines", entry 3 "four", and there is no fifth.
+  await ui.select({ key: 'answers-1', value: '2' })
+  await ui.press({ key: 'send-all' })
+  expect(sent.at(-1)).toBe('B → three lines: too many')
+  // After sending, row 0 is the only one left before B came back; propose B again to pick "four".
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'B', text: 'too many', options: ['one', 'two', 'three\nlines', 'four', 'five'] }] })
+  await ui.redraw()
+  await ui.select({ key: 'answers-1', value: '3' })
+  await ui.press({ key: 'send-all' })
+  expect(sent.at(-1)).toBe('B → four: too many')
 })
 
 test('collapsed, a chosen answer shows as ●', async ($, on) => {
   setup(on)
 
-  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, RELEASE] })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  await ui.press({ key: 'answer-1-2' })
+  await ui.press({ key: 'answer-1-1' })
   await ui.press({ key: 'toggle' })
   await ui.redraw()
-  expect(await ui.find({ type: 'Text', text: ['T1 ○', 'R1 ●'].join(S) })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: ['T1 ○', 'R2 ●'].join(S) })).toBeDefined()
 })
 
-test('the chat box shows the answer buttons, and after sending the chosen answer', async ($, on) => {
+test('the chat box shows the answers, and after sending the chosen one', async ($, on) => {
   const sent = setup(on)
 
-  await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
   const row = await $.ui.mount({
     plugin: 'decision-bar',
     surface: 'desktop',
@@ -1080,17 +1135,75 @@ test('the chat box shows the answer buttons, and after sending the chosen answer
     props: {
       tool_use_id: 'call-1',
       tool: TOOL,
-      input: { language: 'en', proposals: [RELEASE] },
+      input: { language: 'en', proposals: [TESTS] },
       isRunning: false,
       isErrored: false,
       isInterrupted: false,
     } as unknown as RenderPropsOf['ToolUse'],
   })
-  await row.press({ key: 'chat-call-1-answer-0-2' })
+  await row.press({ key: 'chat-call-1-answer-0-1' })
   await row.press({ key: 'chat-call-1-send-box' })
-  expect(sent.at(-1)).toBe('R1 → Not yet: Commit the release.')
+  expect(sent.at(-1)).toBe('R2 → Later: Run the tests?')
   await row.redraw()
-  expect(await row.find({ type: 'Text', text: '→ Not yet' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: '→ Later' })).toBeDefined()
+})
+
+test('other answers for the same proposal start over: no old choice or remark confirmation', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.input({ key: 'remark-0', text: 'why now?' })
+  expect(sent).toEqual(['R2 (no decision yet)\n↳ Remark: why now?'])
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /remark sent/ })).toBeDefined()
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [{ ...TESTS, options: ['Yes', 'No'] }] })
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /remark sent/ })).toBeUndefined()
+  // The same remark again is a new remark on a new proposal: it goes out.
+  await ui.input({ key: 'remark-0', text: 'why now?' })
+  expect(sent.at(-1)).toBe('R2 (no decision yet)\n↳ Remark: why now?')
+})
+
+test('Hide and Restore keep a chosen answer', async ($, on) => {
+  const sent = setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'answer-0-1' })
+  await ui.press({ key: 'hide' })
+  await ui.redraw()
+  await ui.press({ key: 'restore' })
+  await ui.redraw()
+  expect((await ui.find({ key: 'answer-0-1' }))?.text).toContain('●')
+  await ui.press({ key: 'send-all' })
+  expect(sent).toEqual(['R2 → Later: Run the tests?'])
+})
+
+test('in the terminal a row with its own answers lays out like the others', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS, RELEASE] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ key: 'answer-1-0' }))?.text).toContain('Yes')
+  expect(await ui.find({ key: 'answers-2' })).toBeDefined()
+  expect(await ui.find({ key: 'remark-2' })).toBeDefined()
+})
+
+test('Claude is told about answers of its own, and the tool takes them', async ($, on) => {
+  on('prompt.compose', () => ({ sections: [] }))
+  const composed = await $.prompt.compose({
+    model: 'claude-opus-5-5',
+    promptModel: 'claude-opus-5-5',
+    surfaces: ['desktop'],
+    tools: [],
+    outputStyle: null,
+    traits: [],
+  } as Parameters<typeof $.prompt.compose>[0])
+  const text = composed.sections.map(sec => sec.text).join('\n')
+  expect(text).toContain('`options` (optional)')
+  expect(text).toContain('"<label> → <answer>: <proposal>"')
 })
 
 // mergeProposals on its own: how a tool call's proposals join the rows already in the bar.

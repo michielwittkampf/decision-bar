@@ -11,8 +11,8 @@ const COMMAND = 'decisions'
 const OUR_TOOL = new RegExp(`(?:^|_)decision-bar__${TOOL}$`)
 const isOurTool = (name: string) => name === TOOL_FULL || OUR_TOOL.test(name)
 
-// The bar's rows, in order: each proposal with its choice (agree, disagree, or nothing yet: null)
-// and its committed remark. One atom, so a proposal and its choice and remark cannot drift apart.
+// The bar's rows, in order: each proposal with its choice (agree, disagree, the index of an answer
+// of its own, or nothing yet: null) and its committed remark. One atom, so a proposal and its choice and remark cannot drift apart.
 const rows = atom({ plugin: 'decision-bar', key: 'rows' } as const, [] as Row[])
 // The last remark sent per open decision (key: `rowKey(p)`): a confirmation in the row, and the
 // same remark is not sent twice.
@@ -56,7 +56,8 @@ const EN = {
   restore: 'Restore',
   close: 'Close',
   closed: 'closed',
-  nothingToSendDecision: 'Nothing to send: choose agree or disagree, or type a remark.',
+  chooseAnswer: 'choose an answer',
+  nothingToSend: 'Nothing to send: choose an answer, or type a remark.',
   messageDecision: '{label} {decision}: {proposal}',
   messageAnswer: '{label} → {answer}: {proposal}',
   undecided: '{label} (no decision yet)',
@@ -80,8 +81,8 @@ const currentTranslator = async ($: EngineInterface) => translator(await read($,
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',')
 
-// Why the checks below. What Claude puts in the bar (labels, proposals, translations of the bar's
-// texts) leaves as a message from the user when they press Send. A user message carries the user's
+// Why the checks below. What Claude puts in the bar (labels, proposals, answers, translations of the
+// bar's texts) leaves as a message from the user when they press Send. A user message carries the user's
 // authority: Claude, Claude Code and its permission modes take it as instruction and consent,
 // while text Claude wrote or read is only data. If Claude was steered by text it read (prompt
 // injection), the bar must not turn that into consent the user never saw. So a press means what
@@ -153,7 +154,10 @@ const INDENT = '↳ '
 // line break; this trailing one turns that into a blank line between separately sent answers.
 const TRAILER = '\n'
 
-const rowKey = (p: Proposal) => `${p.label}\u0000${p.text}`
+// A proposal's identity: label and text, and its answers if it has them. Other answers make another
+// proposal, so a remark confirmation or a sent answer of the old one does not carry over.
+const rowKey = (p: Proposal) =>
+  p.options ? `${p.label}\u0000${p.text}\u0000${p.options.join('\u0001')}` : `${p.label}\u0000${p.text}`
 
 // What is typed in a remark field, per proposal (`rowKey`). Deliberately not in `$.state`: every
 // write there redraws the bar, and a redrawn field is handed its text again (`value`), which made
@@ -239,7 +243,7 @@ const breakLongWords = (text: string, width: number, soft: boolean) =>
     })
     .join(' ')
 
-// Decided is agree or disagree; the rest is open.
+// Decided is agree, disagree or an answer of its own; the rest is open.
 const tally = (list: Row[]) => {
   const decided = list.filter(row => row.d !== null).length
   const withRemark = list.filter(row => !!row.r.trim()).length
@@ -284,8 +288,10 @@ const INSTRUCTIONS = [
 ].join('\n')
 
 // One line (with any remark below it) per proposal; empty when there is nothing to report.
-const messageLine = (t: Translate, p: Proposal, decision: Decision, remark: string | undefined) => {
+const messageLine = (t: Translate, p: Proposal, chosen: Decision, remark: string | undefined) => {
   const r = remark?.trim() ?? ''
+  // An answer index the row no longer has is no choice: never a line with an empty answer.
+  const decision = typeof chosen === 'number' && p.options?.[chosen] === undefined ? null : chosen
   if (decision === null) {
     // The remark always goes on its own line, so it is never mistaken for the proposal.
     return r ? `${t('undecided', { label: p.label })}\n${INDENT}${t('messageRemark', { remark: r })}` : ''
@@ -416,7 +422,11 @@ const clear = async ($: EngineInterface) => {
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
   await commitDrafts($)
   const stored = await read($, rows)
-  const list = agreeToAll ? stored.map((row): Row => (row.p.options ? row : { ...row, d: 'agree' })) : stored
+  // An answer index the row no longer has counts as no choice (see `messageLine`).
+  const valid = stored.map((row): Row =>
+    typeof row.d === 'number' && row.p.options?.[row.d] === undefined ? { ...row, d: null } : row,
+  )
+  const list = agreeToAll ? valid.map((row): Row => (row.p.options ? row : { ...row, d: 'agree' })) : valid
   const sentBefore = await read($, sentRemarks)
   const t = await currentTranslator($)
   // Only a remark, and exactly that one was sent already: not again.
@@ -471,9 +481,9 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
     return recorded
   })
   // Sent as the user, because these are the user's answers, and only from a press of Send, Send
-  // all, Agree or Enter in a remark field: no hook sends. The message holds the rows' labels and
-  // proposals (checked, see the comment above `languageCode`), the bar's texts and what the user
-  // typed, nothing else read from the session. README: "What the mod does".
+  // all, Agree or Enter in a remark field: no hook sends. The message holds the rows' labels,
+  // proposals and chosen answers (checked, see the comment above `languageCode`), the bar's texts
+  // and what the user typed, nothing else read from the session. README: "What the mod does".
   // A blank line between answers, so each stands on its own in the chat.
   await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
@@ -519,9 +529,9 @@ const setLanguage = async ($: EngineInterface, code: string | undefined, transla
 }
 
 // The elements of one surface, as `$.ui.resolve` hands them out (the same for the bar and a
-// chat row); `Input` is missing on mobile.
+// chat row); `Input` and `Select` are missing on mobile.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Elements = { Box: any; Button: any; Text: any; Input?: any }
+type Elements = { Box: any; Button: any; Text: any; Input?: any; Select?: any }
 
 // How the bar or a chat box asks for its rows. `rows` are the bar's rows. Element keys go under
 // `prefix`, so the bar's and each box's elements stay apart. `shown` is what the label column is
@@ -549,7 +559,8 @@ type RowView = Elements & {
   isStale: (p: Proposal) => boolean
   setRemark: (i: number, text: string) => Promise<void>
   keepAndSend: (i: number, text: string) => Promise<void>
-  choose: (i: number, decision: Exclude<Decision, null>) => Promise<unknown>
+  choose: (i: number, decision: Exclude<Decision, null>, p: Proposal) => Promise<unknown>
+  setChoice: (i: number, decision: Decision, p: Proposal) => Promise<unknown>
   roomy: boolean
   labelText: (p: Proposal) => string
   labelWidth: number
@@ -606,17 +617,26 @@ const rowView = async (
     }
     const done = await send($, [i])
     if (!done) {
-      $.ui.toast(t('nothingToSendDecision'))
+      $.ui.toast(t('nothingToSend'))
     }
   }
-  // Pressing the chosen state again sets it back to "no decision".
-  const choose = (i: number, decision: Exclude<Decision, null>) =>
+  // Only on the row as it was drawn: if its proposal or answers changed before the press landed,
+  // the press is about something else and is dropped.
+  const setChoice = (i: number, decision: Decision, p: Proposal) =>
     commitDrafts($).then(() =>
-      update($, rows, old => old.map((row, j) => (j === i ? { ...row, d: row.d === decision ? null : decision } : row))),
+      update($, rows, old =>
+        old.map((row, j) => (j === i && rowKey(row.p) === rowKey(p) ? { ...row, d: decision } : row)),
+      ),
     )
+  // Pressing the chosen state again sets it back to "no decision".
+  const choose = (i: number, decision: Exclude<Decision, null>, p: Proposal) =>
+    setChoice(i, stored[i]?.d === decision ? null : decision, p)
 
   // In the terminal every line costs room above the prompt; elsewhere there is space to breathe.
   const roomy = surface !== 'terminal'
+  // Only the terminal and the desktop app draw a Select; elsewhere (mobile) the element is there
+  // but draws nothing, so the answers stay buttons.
+  const menus = surface === 'terminal' || surface === 'desktop'
   // Labels in one column of equal width, so buttons and fields line up. At most 14 cells: a
   // longer label wraps onto two lines (top-aligned), leaving the room to proposal and field.
   const labelWidth = Math.min(14, Math.max(0, ...shown.map(p => [...p.label].length)) + 2)
@@ -632,7 +652,7 @@ const rowView = async (
     )
   return {
     Box, Button, Text, Input, t, prefix, stored, current, sent, showFull, isStale,
-    setRemark, keepAndSend, choose, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
+    Select: menus ? els.Select : undefined, setRemark, keepAndSend, choose, setChoice, roomy, labelText, labelWidth, fieldWidth, remarkAsText,
   }
 }
 
@@ -688,7 +708,20 @@ const fullRemark = (v: RowView, p: Proposal, i: number) => {
   )
 }
 
-// One decision row: label, proposal, agree / disagree or its answer buttons, remark field and its
+// From this many answers a row shows them in one menu (Select) instead of a button each: four
+// buttons and a field crowd the line. Where there is no Select (mobile) they stay buttons.
+const SELECT_FROM = 3
+
+// What stands before the remark field on the line, as button texts, for the field's width. A menu
+// is about as wide as its longest entry with its arrow.
+const choiceWidths = (v: RowView, p: Proposal) => {
+  if (p.options && v.Select && p.options.length >= SELECT_FROM) {
+    return [[v.t('chooseAnswer'), ...p.options].reduce((a, b) => ([...b].length > [...a].length ? b : a)) + ' ▾']
+  }
+  return (p.options ?? [v.t('agree'), v.t('disagree')]).map(o => `○ ${o}`)
+}
+
+// One decision row: label, proposal, agree / disagree or its own answers, remark field and its
 // full text below.
 const decisionRow = (v: RowView, p: Proposal, i: number) => {
   const { Box, Button, Text, t, prefix: k, sent } = v
@@ -706,13 +739,23 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
         columnGap={1}
         marginLeft={v.labelWidth + 1}
       >
-        {p.options ? (
+        {p.options && v.Select && p.options.length >= SELECT_FROM ? (
+          <v.Select
+            key={`${k}answers-${i}`}
+            options={[
+              { value: '', label: t('chooseAnswer') },
+              ...p.options.map((o, n) => ({ value: String(n), label: o })),
+            ]}
+            value={typeof d === 'number' ? String(d) : ''}
+            onSelect={(value: string) => void v.setChoice(i, value === '' ? null : Number(value), p)}
+          />
+        ) : p.options ? (
           p.options.map((o, n) => (
             <Button
               key={`${k}answer-${i}-${n}`}
               label={`${d === n ? '●' : '○'} ${o}`}
               variant={d === n ? 'primary' : 'secondary'}
-              onPress={() => v.choose(i, n)}
+              onPress={() => v.choose(i, n, p)}
             />
           ))
         ) : (
@@ -721,17 +764,17 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
               key={`${k}agree-${i}`}
               label={`${d === 'agree' ? '●' : '○'} ${t('agree')}`}
               variant={d === 'agree' ? 'primary' : 'secondary'}
-              onPress={() => v.choose(i, 'agree')}
+              onPress={() => v.choose(i, 'agree', p)}
             />,
             <Button
               key={`${k}disagree-${i}`}
               label={`${d === 'disagree' ? '●' : '○'} ${t('disagree')}`}
               variant={d === 'disagree' ? 'primary' : 'secondary'}
-              onPress={() => v.choose(i, 'disagree')}
+              onPress={() => v.choose(i, 'disagree', p)}
             />,
           ]
         )}
-        {remarkField(v, i, t('remarkField'), (p.options ?? [t('agree'), t('disagree')]).map(o => `○ ${o}`))}
+        {remarkField(v, i, t('remarkField'), choiceWidths(v, p))}
         {v.remarkAsText && r.trim() && (
           <Text key={`${k}remark-text-${i}`} dimColor>
             {`✎ ${r.trim()}`}
@@ -813,12 +856,12 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
   // Agree is not an answer to a row with answer buttons, so "Agree to all" counts only the others.
-  const agreeable = stored.filter(row => !row.p.options).length
+  const agreeable = stored.map((row, i) => (row.p.options ? -1 : i)).filter(i => i >= 0)
   // "Send all" is always there: typing a remark alone does not redraw the bar, so the button
   // would otherwise appear only after another action.
   const sendAll = async () => {
     if (!(await send($, all))) {
-      $.ui.toast(t('nothingToSendDecision'))
+      $.ui.toast(t('nothingToSend'))
     }
   }
   return (
@@ -835,8 +878,12 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
         {stored.map(({ p }, i) => decisionRow(v, p, i))}
         <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
           <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
-          {agreeable > 0 && (
-            <Button key="agree-all" label={t(agreeable === 1 ? 'agreeOne' : 'agreeAll')} onPress={() => send($, all, true)} />
+          {agreeable.length > 0 && (
+            <Button
+              key="agree-all"
+              label={t(agreeable.length === 1 ? 'agreeOne' : 'agreeAll')}
+              onPress={() => send($, agreeable, true)}
+            />
           )}
           <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
         </Box>
@@ -863,7 +910,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: TOOL,
       description:
-        "Puts a row per proposed decision (label and proposal) above the user's input field, with agree / disagree and a remark field. An existing label is updated; `remove` removes decisions answered in the chat.",
+        "Puts a row per proposed decision (label and proposal) above the user's input field, with agree / disagree or the decision's own answers, and a remark field. An existing label is updated; `remove` removes decisions answered in the chat.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -1046,7 +1093,7 @@ export const register: Register = on => {
     const openRows = openIndexes.map(i => v.current[i]!)
     const sendBox = async () => {
       if (!(await send($, openIndexes))) {
-        $.ui.toast(t('nothingToSendDecision'))
+        $.ui.toast(t('nothingToSend'))
       }
     }
     return (

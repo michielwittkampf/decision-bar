@@ -20,13 +20,17 @@ the session's "waiting for you" state in the sidebar.
 - The tool takes optional `options` per proposal: the answers, in order. Two to four; with fewer
   the row keeps agree and disagree, more are left out. Each is one plain line of limited length,
   like a label.
-- The row shows those answers as buttons where agree and disagree would be. Choosing one marks
-  it (●); pressing it again clears the choice. Nothing is sent on a press: answers go with Send,
+- The row shows two answers as buttons where agree and disagree would be; choosing one marks it
+  (●), pressing it again clears the choice. Three or four answers show as one menu (Select), with
+  an empty entry to clear the choice: four buttons and a remark field crowd the line. The mobile
+  app draws no menu, so there they stay buttons. Nothing is sent on a press: answers go with Send,
   Send all or Enter in the remark field, as now, so decisions can still be answered at one's own
   pace and in any order.
 - A remark works as on any decision.
-- "Agree to all" leaves rows with answer buttons alone: agree is not one of their answers.
-- A proposal whose text or answers change starts again without choice and remark.
+- "Agree to all" leaves rows with answers of their own alone, also a choice or remark on them:
+  agree is not one of their answers. With no row that agree answers, the button is not there.
+- A proposal whose text or answers change starts again without choice and remark, and without
+  the confirmation of a remark sent for the old one. A press drawn for the old answers is dropped.
 - The chat box shows the same buttons, and after sending the chosen answer.
 
 ## Rule for what is sent
@@ -62,3 +66,5 @@ app's own box would have sent. For buttons Claude defines in the bar that argume
 - Does a row with four answers and a remark field get too busy in the desktop app, and in the
   terminal? To judge in the running app.
 - Should the collapsed bar show the chosen answer, or only that one was chosen (●)? A shows ●.
+- Buttons for two answers and a menu from three: does that read as one design, or should it be
+  one or the other?
