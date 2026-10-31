@@ -21,7 +21,8 @@ const sentRemarks = atom({ plugin: 'decision-bar', key: 'sentRemarks' } as const
 const hiddenLabels = atom({ plugin: 'decision-bar', key: 'hiddenLabels' } as const, [] as string[])
 // The last hidden group, to restore; `show` is the row with the Restore button.
 const lastHidden = atom({ plugin: 'decision-bar', key: 'lastHidden' } as const, null as LastHidden | null)
-const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, false)
+// The bar starts collapsed: one line, until the user expands it.
+const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, true)
 // Proposals (`rowKey`) whose field is being edited: their full-remark line is struck through,
 // as visibly stale text next to the field.
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])

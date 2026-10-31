@@ -1,7 +1,7 @@
 # Answer buttons in the bar (design)
 
-Status: to try out, not released. Variant A is built on branch `claude/answer-buttons`; variant B
-on branch `claude/answer-texts`, on top of A.
+Status: released in 1.5.0 as variant B (which includes A). The trial branches
+`claude/answer-buttons` (A) and `claude/answer-texts` (B) are merged and removed.
 
 ## Why
 
@@ -71,5 +71,6 @@ app's own box would have sent. For buttons Claude defines in the bar that argume
 - Should the collapsed bar show the chosen answer, or only that one was chosen (●)? A shows ●.
   With B this matters more: an answer chosen before collapsing can be sent with Send all from the
   collapsed bar, where its longer text is not on screen at that moment (it was when chosen).
+  Since 1.5.0 the bar also starts collapsed.
 - Buttons for two answers and a menu from three: does that read as one design, or should it be
   one or the other?

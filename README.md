@@ -58,8 +58,9 @@ in a side chat of the desktop app, where Claude asks in the chat instead
   not yes or no, Claude gives the decision its own answers ("Commit now", "Run the tests first",
   "Not yet"): two as buttons, more in a menu. An answer can carry a longer text, which the row
   shows in full once you choose it, and which is what is sent.
-- **Out of the way when you need the room.** Collapsed, the bar is a single line with the state of
-  every decision, and the conversation gets the space back.
+- **Out of the way when you need the room.** The bar starts collapsed: a single line with the
+  state of every decision, so the conversation keeps its space. Click the heading to open it, and
+  again to fold it away; it stays as you left it for the rest of the session.
 
   ![Collapsed, the bar shrinks to one line and leaves the space above it free for the conversation](docs/collapsed.png)
 

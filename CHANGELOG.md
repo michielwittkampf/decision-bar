@@ -1,7 +1,9 @@
 # Changelog
 
-## 1.5.0 — unreleased
+## 1.5.0 — 2026-10-31
 
+- The bar starts collapsed, as one line with the state of every decision; click the heading to
+  open it. It stays open or collapsed as you leave it for the rest of the session.
 - Answers of its own: Claude can give a decision two to four answers ("Commit now", "Run the
   tests first", "Not yet") in place of agree and disagree: two as buttons, three or four as one
   menu (buttons on mobile). You choose one and send it as any decision; the line sent is

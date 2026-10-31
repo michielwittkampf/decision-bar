@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import type { On, RenderPropsOf } from 'claude-code'
+import type { EngineInterface, On, RenderPropsOf } from 'claude-code'
 
 import type { Row } from '../types'
 import { instructions, mergeProposals, withoutQuestions } from './register'
@@ -51,6 +51,16 @@ const NL = {
   commandEmpty: 'Er zijn geen verborgen beslissingen om terug te halen.',
 }
 
+const mount = async ($: EngineInterface, spec: Parameters<EngineInterface['ui']['mount']>[0]) => {
+  const ui = await $.ui.mount(spec)
+  if (expandFirst && (await ui.find({ key: 'toggle' }))) {
+    expandFirst = false
+    await ui.press({ key: 'toggle' })
+    await ui.redraw()
+  }
+  return ui
+}
+
 const PROPOSALS = [
   { label: 'T1', text: 'tea on Tuesday' },
   { label: 'T2', text: 'orange penguin' },
@@ -58,10 +68,14 @@ const PROPOSALS = [
 ]
 
 // What sits below the plugin: an empty band, and a prompt.submit that catches what is sent.
+// The bar starts collapsed; most tests look at the rows, so `mount` expands it the first time it
+// is drawn, unless setup was told not to.
 let raw: string[] = []
-const setup = (on: On) => {
+let expandFirst = true
+const setup = (on: On, expanded = true) => {
   const sent: string[] = []
   raw = []
+  expandFirst = expanded
   on('ui.render', ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box key="empty" />
@@ -89,7 +103,7 @@ test('no decision by default; agree and disagree exclude each other, on terminal
 
   for (const surface of ['terminal', 'desktop'] as const) {
     await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await mount($, { ...BAND, surface })
 
     expect((await ui.find({ key: 'agree-0' }))?.text).toContain('○')
     expect((await ui.find({ key: 'disagree-0' }))?.text).toContain('○')
@@ -116,7 +130,7 @@ test('"Send all" sends decisions and remarks; undecided rows stay', async ($, on
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.press({ key: 'disagree-1' })
   await ui.input({ key: 'remark-1', text: 'rather purple', kind: 'change' })
@@ -138,7 +152,7 @@ test('sending one row: only that row goes, the rest keeps its choice and remark'
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-2' })
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'disagree-1' })
@@ -157,7 +171,7 @@ test('a remark without a decision on one row: the row stays open', async ($, on)
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-0', text: 'why tea?' })
   expect(sent).toEqual(['T1 (no decision yet)\n↳ Remark: why tea?'])
 
@@ -170,7 +184,7 @@ test('one row without a decision and without a remark sends nothing', async ($, 
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-0', text: '' })
   expect(sent).toEqual([])
 })
@@ -179,7 +193,7 @@ test('"Agree to all" agrees to everything, with the remarks', async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'disagree-1' })
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'agree-all' })
@@ -194,7 +208,7 @@ test('a typed message leaves choices and remarks; also visible while Claude work
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
+  const ui = await mount($, { ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
   await ui.press({ key: 'agree-1' })
   // Like a typed message: only the text, the engine fills in the rest.
   await $.prompt.submit({ text: 'by the way' } as Parameters<typeof $.prompt.submit>[0])
@@ -206,7 +220,7 @@ test('a repeated call keeps choices; a changed proposal starts over', async ($, 
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.press({ key: 'agree-1' })
   const res = await $.tool.call({
@@ -229,7 +243,7 @@ test('the bar shows the proposal itself, not only the label', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
 })
 
@@ -237,7 +251,7 @@ test('Hide remembers the labels: a later call does not bring them back', async (
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'hide' })
   const res = await $.tool.call({ tool: TOOL, ...EN, proposals: [...PROPOSALS, { label: 'T4', text: 'new' }] })
   expect(String(res.result)).toContain('hidden earlier by the user: T1, T2, T3')
@@ -253,7 +267,7 @@ test('remove takes out decisions answered in the chat', async ($, on) => {
   const res = await $.tool.call({ tool: TOOL, ...EN, remove: ['T1', 'T3'] })
   expect(String(res.result)).toContain('Removed: T1, T3')
   expect(String(res.result)).toContain('Now open in the bar: T2')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^T1$/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^T2$/ })).toBeDefined()
 })
@@ -271,7 +285,7 @@ test('remove takes out only what was in the bar: a label proposed in the same ca
   expect(String(res.result)).toContain('Added: T2')
   expect(String(res.result)).toContain('Removed: T1.')
   expect(String(res.result)).toContain('Now open in the bar: T2')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'a new one with a used label' })).toBeDefined()
 })
 
@@ -279,7 +293,7 @@ test('Hide removes everything without sending anything', async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.press({ key: 'hide' })
   await ui.redraw()
@@ -301,7 +315,7 @@ test("the next-step box's question stays out of the bar; the decisions stay", as
   const res = await $.tool.call(WRAP_UP)
   // The call reaches the desktop app (here the stand-in) unchanged.
   expect(res.result).toBe('ok')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'Shall I commit it?' })).toBeUndefined()
   expect(await ui.find({ key: 'agree-2' })).toBeDefined()
   expect(await ui.find({ key: 'agree-3' })).toBeUndefined()
@@ -326,7 +340,7 @@ test('a remark without a decision: confirmation in the row, and not sent twice',
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-2', text: 'sdfsfaaaa' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /remark sent/ })).toBeDefined()
@@ -348,7 +362,7 @@ test('a decision after an earlier remark is sent normally', async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-0', text: 'hmm' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-0', text: 'hmm' })
@@ -359,7 +373,7 @@ test('after Hide: a row with Restore brings everything back, with choices and re
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-1' })
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'hide' })
@@ -381,7 +395,7 @@ test('the Restore row goes away on the next message; /decisions still works', as
   on('command.run', () => ({ text: '' }))
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'hide' })
   await $.prompt.submit({ text: 'something else' } as Parameters<typeof $.prompt.submit>[0])
   await ui.redraw()
@@ -400,7 +414,7 @@ test('the send button with an empty field passed still sends the typed remark', 
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-1', text: 'discuss first', kind: 'change' })
   // As the app may do on a click on the button: Enter with an empty field.
   await ui.input({ key: 'remark-1', text: '' })
@@ -411,7 +425,7 @@ test('a long remark is shown in full below the field', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   const long = 'this is a fairly long remark that does not fit in one narrow field and belongs below it'
   // The line shows the committed text: after another action, here a choice.
   await ui.input({ key: 'remark-0', text: long, kind: 'change' })
@@ -429,7 +443,7 @@ test('collapsing shows a summary; expanding brings the rows back', async ($, on)
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-2', text: 'with felt pads', kind: 'change' })
   await ui.press({ key: 'toggle' })
@@ -446,12 +460,25 @@ test('collapsing shows a summary; expanding brings the rows back', async ($, on)
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
 })
 
+test('the bar starts collapsed; one press expands it', async ($, on) => {
+  setup(on, false)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: ['T1 ○', 'T2 ○', 'T3 ○'].join(S) })).toBeDefined()
+
+  await ui.press({ key: 'toggle' })
+  await ui.redraw()
+  expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+})
+
 test('collapsed and too narrow for two lines: only the counts', async ($, on) => {
   setup(on)
 
   const many = Array.from({ length: 7 }, (_, i) => ({ label: 'Decision' + (i + 1), text: `proposal ${i + 1}` }))
   await $.tool.call({ tool: TOOL, ...EN, proposals: many })
-  const wide = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 200 } })
+  const wide = await mount($, { ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 200 } })
   await wide.press({ key: 'agree-0' })
   await wide.press({ key: 'disagree-1' })
   await wide.press({ key: 'agree-2' })
@@ -463,7 +490,7 @@ test('collapsed and too narrow for two lines: only the counts', async ($, on) =>
   await wide.unmount()
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const narrow = await $.ui.mount({ ...BAND, surface, props: { ...BAND.props, bodyColumns: 50 } })
+    const narrow = await mount($, { ...BAND, surface, props: { ...BAND.props, bodyColumns: 50 } })
     expect(await narrow.find({ type: 'Text', text: '4 open and 3 decided' })).toBeDefined()
     await narrow.unmount()
   }
@@ -473,7 +500,7 @@ test('mini summary: a count of zero is left out', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, bodyColumns: 20 } })
+  const ui = await mount($, { ...BAND, surface: 'terminal', props: { ...BAND.props, bodyColumns: 20 } })
   await ui.press({ key: 'toggle' })
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: '3 open' })).toBeDefined()
@@ -496,7 +523,7 @@ test('the heading counts open and chosen apart; the mini summary counts remarks'
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 25 } })
+  const ui = await mount($, { ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 25 } })
   expect(await ui.find({ type: 'Text', text: '3 open' })).toBeDefined()
 
   await ui.press({ key: 'agree-0' })
@@ -515,7 +542,7 @@ test('in English: no request for a translation', async ($, on) => {
 
   const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
   expect(String(res.result)).not.toContain('translation')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect((await ui.find({ key: 'hide' }))?.text).toContain('Hide')
 })
 
@@ -542,7 +569,7 @@ test('a new language: English until Claude supplies the texts, and only what is 
   const first = await $.tool.call({ tool: TOOL, language: 'de-AT', proposals: PROPOSALS })
   expect(String(first.result)).toContain('language "de"')
   expect(String(first.result)).toContain('"agree":"agree"')
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await mount($, { ...BAND, surface: 'terminal' })
   expect((await ui.find({ key: 'agree-0' }))?.text).toContain('agree')
 
   // Part of it, with one translation that lost a {placeholder}: that one is not used.
@@ -564,7 +591,7 @@ test('a translation once supplied is kept, also after switching language', async
 
   await $.tool.call({ tool: TOOL, language: 'nl', translation: NL, proposals: PROPOSALS })
   await $.tool.call({ tool: TOOL, ...EN })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect((await ui.find({ key: 'hide' }))?.text).toContain('Hide')
 
   const back = await $.tool.call({ tool: TOOL, language: 'NL' })
@@ -581,7 +608,7 @@ test('a call with only a language switches it and leaves rows, choices and remar
   setup(on)
 
   await $.tool.call({ tool: TOOL, language: 'nl', translation: NL, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-1', text: 'rather purple', kind: 'change' })
 
@@ -596,7 +623,7 @@ test('with one row the bottom buttons say Send and Agree; with more they stay pl
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.redraw()
   expect((await ui.find({ key: 'send-all' }))?.text).toBe('Send')
@@ -612,7 +639,7 @@ test('typed text stays when the bar redraws for another reason', async ($, on) =
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-1', text: 'half typed', kind: 'change' })
   // Meanwhile Claude puts a new decision in the bar; then a choice on another row.
   await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'T4', text: 'a fourth' }] })
@@ -627,7 +654,7 @@ test('the full text is struck through while typing and comes back updated on ano
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   const first = 'a first long remark that does not fit in the narrow field'
   await ui.input({ key: 'remark-0', text: first, kind: 'change' })
   await ui.press({ key: 'agree-1' })
@@ -650,7 +677,7 @@ test('typing in another field commits the previous one: its full text is updated
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   const long = 'a long remark that does not fit in the narrow field, for row one'
   await ui.input({ key: 'remark-0', text: long, kind: 'change' })
   await ui.input({ key: 'remark-1', text: 'k', kind: 'change' })
@@ -662,10 +689,10 @@ test('a label word longer than the column is broken with a hyphen', async ($, on
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'Settingsfilename', text: 'restore it' }] })
-  const term = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const term = await mount($, { ...BAND, surface: 'terminal' })
   expect(await term.find({ type: 'Text', text: 'Settingsfile-\nname' })).toBeDefined()
   await term.unmount()
-  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const desk = await mount($, { ...BAND, surface: 'desktop' })
   expect(await desk.find({ type: 'Text', text: [...'Settingsfilename'].join('\u00AD') })).toBeDefined()
 })
 
@@ -673,7 +700,7 @@ test('every message from the bar ends with a line break, so queued answers get a
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.input({ key: 'remark-0', text: '' })
   // The sent row left the bar, so T2 is now the first row.
@@ -689,7 +716,7 @@ test('no limit on open decisions: twenty rows stay, none dropped', async ($, on)
   const res = await $.tool.call({ tool: TOOL, ...EN, proposals: many })
   expect(String(res.result)).toContain('D1, D2')
   expect(String(res.result)).toContain('D20.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
   expect(await ui.find({ key: 'agree-19' })).toBeDefined()
 })
@@ -698,7 +725,7 @@ test('the tool call row in the chat shows the decisions, and a press there sets 
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const row = await $.ui.mount({
+  const row = await mount($, {
     plugin: 'decision-bar',
     surface: 'desktop',
     component: 'ToolUse',
@@ -713,7 +740,7 @@ test('the tool call row in the chat shows the decisions, and a press there sets 
   })
   expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
   await row.press({ key: 'chat-call-1-agree-1' })
-  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const bar = await mount($, { ...BAND, surface: 'desktop' })
   expect((await bar.find({ key: 'agree-1' }))?.text).toContain('●')
 })
 
@@ -735,7 +762,7 @@ test('the chat box sends only its own decisions, and then shows the sent answers
       isInterrupted: false,
     } as unknown as RenderPropsOf['ToolUse'],
   } as const
-  const row = await $.ui.mount(box)
+  const row = await mount($, box)
   await row.press({ key: 'chat-call-1-agree-0' })
   await row.press({ key: 'chat-call-1-disagree-1' })
   await row.input({ key: 'chat-call-1-remark-1', text: 'rather purple', kind: 'change' })
@@ -747,7 +774,7 @@ test('the chat box sends only its own decisions, and then shows the sent answers
   expect(await row.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
   expect(await row.find({ type: 'Text', text: '↳ rather purple' })).toBeDefined()
   // T3 came from another call and is still open in the bar.
-  const bar = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const bar = await mount($, { ...BAND, surface: 'desktop' })
   expect(await bar.find({ key: 'agree-0' })).toBeDefined()
 })
 
@@ -774,8 +801,8 @@ test('a group of tool calls with a decision box stays open; other groups are lef
         isExpanded: false,
       } as unknown as RenderPropsOf['ToolGroup'],
     }) as const
-  await $.ui.mount(group(TOOL))
-  await $.ui.mount(group('Read'))
+  await mount($, group(TOOL))
+  await mount($, group('Read'))
   expect(seen).toEqual([true, false])
 })
 
@@ -802,7 +829,7 @@ test('a chat box still draws once remove has emptied the bar', async ($, on) => 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
   await $.tool.call({ tool: TOOL, ...EN, remove: ['T1'] })
   for (const surface of ['terminal', 'desktop'] as const) {
-    const row = await $.ui.mount({ ...chatRow([PROPOSALS[0]!]), surface })
+    const row = await mount($, { ...chatRow([PROPOSALS[0]!]), surface })
     expect(await row.find({ type: 'Text', text: 'tea on Tuesday' })).toBeDefined()
     expect(await row.find({ type: 'Text', text: 'closed' })).toBeDefined()
   }
@@ -812,12 +839,12 @@ test('a chat box still draws once everything in it was sent and the bar is empty
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
-  const row = await $.ui.mount(chatRow(PROPOSALS.slice(0, 2)))
+  const row = await mount($, chatRow(PROPOSALS.slice(0, 2)))
   await row.press({ key: 'chat-call-1-agree-0' })
   await row.press({ key: 'chat-call-1-disagree-1' })
   await row.press({ key: 'chat-call-1-send-box' })
   for (const surface of ['terminal', 'desktop'] as const) {
-    const again = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface })
+    const again = await mount($, { ...chatRow(PROPOSALS.slice(0, 2)), surface })
     expect(await again.find({ type: 'Text', text: '✓ agree' })).toBeDefined()
     expect(await again.find({ type: 'Text', text: '✗ disagree' })).toBeDefined()
   }
@@ -827,13 +854,13 @@ test('in the terminal a chat box shows the remark as text, without a field; the 
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
-  const bar = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const bar = await mount($, { ...BAND, surface: 'terminal' })
   await bar.input({ key: 'remark-1', text: 'rather purple', kind: 'change' })
   await bar.press({ key: 'agree-0' })
-  const terminal = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface: 'terminal' })
+  const terminal = await mount($, { ...chatRow(PROPOSALS.slice(0, 2)), surface: 'terminal' })
   expect(await terminal.find({ key: 'chat-call-1-remark-1' })).toBeUndefined()
   expect(await terminal.find({ type: 'Text', text: '✎ rather purple' })).toBeDefined()
-  const desktop = await $.ui.mount({ ...chatRow(PROPOSALS.slice(0, 2)), surface: 'desktop' })
+  const desktop = await mount($, { ...chatRow(PROPOSALS.slice(0, 2)), surface: 'desktop' })
   expect(await desktop.find({ key: 'chat-call-1-remark-1' })).toBeDefined()
   expect(await desktop.find({ type: 'Text', text: '✎ rather purple' })).toBeUndefined()
 })
@@ -864,7 +891,7 @@ test('drawn earlier, nothing attached now (the user looks at another session): n
   let attached: 'desktop'[] = ['desktop']
   on('session.surfaces', () => ({ value: attached }))
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.unmount()
   attached = []
 
@@ -879,7 +906,7 @@ test('a chat box drawn earlier counts as drawn too', async ($, on) => {
   on('session.surfaces', () => ({ value: attached }))
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const box = await $.ui.mount({
+  const box = await mount($, {
     plugin: 'decision-bar',
     surface: 'desktop',
     component: 'ToolUse',
@@ -926,7 +953,7 @@ test('the bar drawn on an attached surface: no warning, on terminal and desktop'
 
   for (const surface of ['terminal', 'desktop'] as const) {
     attached = [surface]
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await mount($, { ...BAND, surface })
     const res = await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
     expect(String(res.result)).not.toContain(NOT_VISIBLE)
     await ui.unmount()
@@ -938,7 +965,7 @@ test('drawn on a surface that has left: not visible again', async ($, on) => {
   let attached: ('desktop' | 'mobile')[] = ['desktop']
   on('session.surfaces', () => ({ value: attached }))
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.unmount()
   attached = ['mobile']
 
@@ -958,7 +985,7 @@ test('label and proposal go out as one plain line: no line breaks, invisible cha
       { label: '\n', text: 'no label left' },
     ],
   })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   // The entry whose label is only whitespace is left out.
   expect(await ui.find({ key: 'agree-2' })).toBeUndefined()
   await ui.press({ key: 'agree-0' })
@@ -974,7 +1001,7 @@ test('a changed proposal also drops the remark written for the old text', async 
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-1', text: 'yes, orange', kind: 'change' })
   await ui.press({ key: 'agree-0' })
   await $.tool.call({ tool: TOOL, ...EN, proposals: [{ label: 'T2', text: 'purple penguin' }] })
@@ -1006,7 +1033,7 @@ test('a translation is one short line, agree and disagree differ, and a supplied
   // The fixed answer shape is never asked for.
   expect(String(first.result)).not.toContain('messageDecision')
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect((await ui.find({ key: 'hide' }))?.text).toContain('Verberg')
   expect((await ui.find({ key: 'agree-0' }))?.text).toContain('agree')
 
@@ -1033,7 +1060,7 @@ test("another server's tool whose name ends the same is not taken for the bar's 
 
   const res = await $.tool.call({ tool: 'mcp__other-decision-bar__decisions', ...EN, proposals: PROPOSALS })
   expect(String(res.result)).toBe('ok')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
 })
 
@@ -1048,7 +1075,7 @@ test('joiners and direction marks stay: Persian, emoji and a label starting with
       { label: 'Family', text: 'add 👨‍👩‍👧 as an icon' },
     ],
   })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'agree-0' })
   await ui.press({ key: 'agree-1' })
   await ui.press({ key: 'send-all' })
@@ -1067,7 +1094,7 @@ test('a translation may use joiners and be longer, but not turn text around', as
   })
   expect(String(res.result)).toContain('Not used from translation')
   expect(String(res.result)).toMatch(/: restore\./)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect((await ui.find({ key: 'hide' }))?.text).toContain('پنهان‌سازی')
 })
 
@@ -1080,7 +1107,7 @@ test('two answers replace agree and disagree as buttons; the chosen one is sent 
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-1' })).toBeUndefined()
   expect((await ui.find({ key: 'answer-1-1' }))?.text).toContain('○ Later')
   // The first row keeps agree and disagree.
@@ -1105,7 +1132,7 @@ test('three or more answers are one menu; picking sets the choice, the empty ent
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'answer-0-0' })).toBeUndefined()
   expect(await ui.find({ key: 'answers-0' })).toBeDefined()
 
@@ -1125,7 +1152,7 @@ test('on mobile, without a menu, three answers stay buttons (the chat box; mobil
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [RELEASE] })
-  const row = await $.ui.mount({
+  const row = await mount($, {
     plugin: 'decision-bar',
     surface: 'mobile',
     component: 'ToolUse',
@@ -1148,7 +1175,7 @@ test('"Agree to all" sends only the rows agree answers; rows with their own answ
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   // A chosen answer and a remark on the other row do not go along.
   await ui.press({ key: 'answer-1-0' })
   await ui.input({ key: 'remark-1', text: 'quickly', kind: 'change' })
@@ -1172,7 +1199,7 @@ test('answers are two to four plain lines; fewer leaves agree and disagree', asy
       { label: 'B', text: 'too many', options: ['one', 'two', 'two', 'three\nlines', '', 'four', 'five'] },
     ],
   })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
   expect(await ui.find({ key: 'answer-0-0' })).toBeUndefined()
   // Duplicates and empty ones go, line breaks become spaces, at most four: entry 2 is "three
@@ -1192,7 +1219,7 @@ test('collapsed, a chosen answer shows as ●', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'answer-1-1' })
   await ui.press({ key: 'toggle' })
   await ui.redraw()
@@ -1203,7 +1230,7 @@ test('the chat box shows the answers, and after sending the chosen one', async (
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
-  const row = await $.ui.mount({
+  const row = await mount($, {
     plugin: 'decision-bar',
     surface: 'desktop',
     component: 'ToolUse',
@@ -1227,7 +1254,7 @@ test('other answers for the same proposal start over: no old choice or remark co
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.input({ key: 'remark-0', text: 'why now?' })
   expect(sent).toEqual(['R2 (no decision yet)\n↳ Remark: why now?'])
   await ui.redraw()
@@ -1245,7 +1272,7 @@ test('Hide and Restore keep a chosen answer', async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'answer-0-1' })
   await ui.press({ key: 'hide' })
   await ui.redraw()
@@ -1260,13 +1287,13 @@ test('in the terminal a row with its own answers lays out like the others', asyn
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!, TESTS, RELEASE] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await mount($, { ...BAND, surface: 'terminal' })
   expect((await ui.find({ key: 'answer-1-0' }))?.text).toContain('Yes')
   expect(await ui.find({ key: 'answers-2' })).toBeDefined()
   expect(await ui.find({ key: 'remark-2' })).toBeDefined()
 
   // A chat row in the terminal takes no keys: three answers stay buttons there.
-  const row = await $.ui.mount({
+  const row = await mount($, {
     plugin: 'decision-bar',
     surface: 'terminal',
     component: 'ToolUse',
@@ -1313,7 +1340,7 @@ test('an answer with a longer text shows it once chosen, and sends it', async ($
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [DEPLOY] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   // The button shows the short label; the longer text is not on screen yet.
   expect((await ui.find({ key: 'answer-0-0' }))?.text).toContain('○ Now')
   expect(await ui.find({ key: 'answer-text-box-0' })).toBeUndefined()
@@ -1330,7 +1357,7 @@ test('an answer without a longer text sends its label, and shows no extra line',
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [DEPLOY] })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'answer-0-1' })
   await ui.redraw()
   expect(await ui.find({ key: 'answer-text-box-0' })).toBeUndefined()
@@ -1347,7 +1374,7 @@ test('in a menu too, the chosen answer shows its longer text; the chat box shows
     options: ['Friday', { label: 'Monday', text: 'Monday, after the stand-up' }, { label: 'Later', text: 'Later' }],
   }
   await $.tool.call({ tool: TOOL, ...EN, proposals: [plan] })
-  const row = await $.ui.mount({
+  const row = await mount($, {
     plugin: 'decision-bar',
     surface: 'desktop',
     component: 'ToolUse',
@@ -1383,7 +1410,7 @@ test('a longer text is one plain line of limited length', async ($, on) => {
     ...EN,
     proposals: [{ label: 'L', text: 'long', options: [{ label: 'A', text: `two\nlines ${'x'.repeat(300)}` }, 'B'] }],
   })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'answer-0-0' })
   await ui.press({ key: 'send-all' })
   const answer = sent[0]!.slice('L → '.length, -': long'.length)
@@ -1486,7 +1513,7 @@ test('a duplicate answer lends its text to the first one without; a row with tex
     ...EN,
     proposals: [{ label: 'D', text: 'Deploy.', options: ['Now', { label: 'Now', text: 'Now, and watch it' }, 'Later'] }],
   })
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
   await ui.press({ key: 'answer-0-0' })
   await ui.redraw()
   expect((await ui.find({ key: 'answer-text-box-0' }))?.text).toBe('→ Now, and watch it')
