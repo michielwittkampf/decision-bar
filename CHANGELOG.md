@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.1 — 2026-11-01
+
+- The collapsed bar opens with a click anywhere on its line, not only on the heading. It looks as
+  before; the summary brightens under the pointer.
+- Expanded, the heading stays on top while you scroll through many decisions, so the bar can
+  always be folded away.
+- On a narrow screen, buttons that wrap to a new line no longer overlap, and a text below them
+  (such as "✓ remark sent") keeps a little space.
+
 ## 1.5.0 — 2026-10-31
 
 - The bar starts collapsed, as one line with the state of every decision; click the heading to

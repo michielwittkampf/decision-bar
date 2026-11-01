@@ -791,6 +791,9 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
         alignItems="center"
         flexWrap="wrap"
         columnGap={1}
+        // A narrow bar wraps the buttons: without a gap the desktop app draws the lines over each
+        // other and a text right against the buttons above it. The terminal draws "sm" as 0.
+        rowGap="sm"
         marginLeft={v.labelWidth + 1}
       >
         {p.options && v.Select && p.options.length >= SELECT_FROM ? (
@@ -900,10 +903,15 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
   return (
     <Box flexDirection="row" alignItems="center" columnGap={1}>
       <Button key="toggle" label={`${CLOSED} ${t('heading')}`} onPress={toggle} />
-      <Box key="summary-box" flexGrow={1} flexShrink={1}>
-        <Text key="summary" dimColor>
-          {lines > 2 ? miniSummary(t, current) : summary}
-        </Text>
+      {/* The summary opens the bar too: a Box takes no press, so it is a Button without chrome,
+          dim as before and at full strength under the pointer. A column stretches it across the
+          room up to Send all, so the empty space there opens the bar as well. */}
+      <Box key="summary-box" flexDirection="column" alignItems="stretch" flexGrow={1} flexShrink={1}>
+        <Button key="summary-toggle" label={t('heading')} plain dimColor onPress={toggle}>
+          <Text key="summary" dimColor>
+            {lines > 2 ? miniSummary(t, current) : summary}
+          </Text>
+        </Button>
       </Box>
       {hasSomething && <Button key="send-all" label={sendLabel} variant="primary" onPress={() => send($, all)} />}
     </Box>
@@ -911,7 +919,9 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
 }
 
 // Expanded: the heading with the counts, every row, and the buttons that act on all of them.
-const expandedBar = ($: EngineInterface, v: RowView) => {
+// `offset` is the first row the band's window shows: scrolled down, the heading moves along to
+// stay on top, so the bar can always be folded away.
+const expandedBar = ($: EngineInterface, v: RowView, offset: number) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
   // Agree is not an answer to a row with answers of its own, so "Agree to all" takes only the others.
@@ -925,26 +935,31 @@ const expandedBar = ($: EngineInterface, v: RowView) => {
   }
   return (
     <Box flexDirection="column" rowGap={1}>
-      <Box key="heading" flexDirection="row" alignItems="center" columnGap={1}>
+      <Box key="heading" flexDirection="row" alignItems="center" columnGap={1} marginTop={offset}>
         <Button key="toggle" label={`${OPENED} ${t('heading')}`} plain onPress={toggle} />
         <Text key="tally" dimColor>
           {headingTally(t, current)}
         </Text>
       </Box>
-      {/* Outside the terminal the chevron sits a little to the right because of the button's
-          border: the content moves one cell along so it lines up below it. */}
-      <Box key="content" flexDirection="column" rowGap={1} marginLeft={v.roomy ? 1 : 0}>
-        {stored.map(({ p }, i) => decisionRow(v, p, i))}
-        <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} marginTop={1}>
-          <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
-          {agreeable.length > 0 && (
-            <Button
-              key="agree-all"
-              label={t(agreeable.length === 1 ? 'agreeOne' : 'agreeAll')}
-              onPress={() => send($, agreeable, true)}
-            />
-          )}
-          <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
+      {/* The heading pushes the content down by `offset`; the content moves back up as far, and
+          what then sticks out above sits under the heading and is cut off. The tree keeps its
+          height, so the engine scrolls it as before. */}
+      <Box key="content-clip" flexDirection="column" overflow="hidden">
+        {/* Outside the terminal the chevron sits a little to the right because of the button's
+            border: the content moves one cell along so it lines up below it. */}
+        <Box key="content" flexDirection="column" rowGap={1} marginLeft={v.roomy ? 1 : 0} marginTop={-offset}>
+          {stored.map(({ p }, i) => decisionRow(v, p, i))}
+          <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1} rowGap="sm" marginTop={1}>
+            <Button key="send-all" label={sendLabel} variant="primary" onPress={() => void sendAll()} />
+            {agreeable.length > 0 && (
+              <Button
+                key="agree-all"
+                label={t(agreeable.length === 1 ? 'agreeOne' : 'agreeAll')}
+                onPress={() => send($, agreeable, true)}
+              />
+            )}
+            <Button key="hide" label={t('hide')} role="dismiss" onPress={() => hide($)} />
+          </Box>
         </Box>
       </Box>
     </Box>
@@ -1241,6 +1256,8 @@ export const register: Register = (on, options) => {
       return hiddenNotice($, table, translator(await read($, texts)), hidden.rows.length)
     }
     const v = await rowView($, table, { surface: e.surface, rows: list, prefix: '', columns: e.props.bodyColumns })
-    return (await read($, collapsed)) ? collapsedBar($, v, e.props.bodyColumns) : expandedBar($, v)
+    return (await read($, collapsed))
+      ? collapsedBar($, v, e.props.bodyColumns)
+      : expandedBar($, v, e.props.scroll?.offset ?? 0)
   })
 }

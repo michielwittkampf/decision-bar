@@ -59,8 +59,9 @@ in a side chat of the desktop app, where Claude asks in the chat instead
   "Not yet"): two as buttons, more in a menu. An answer can carry a longer text, which the row
   shows in full once you choose it, and which is what is sent.
 - **Out of the way when you need the room.** The bar starts collapsed: a single line with the
-  state of every decision, so the conversation keeps its space. Click the heading to open it, and
-  again to fold it away; it stays as you left it for the rest of the session.
+  state of every decision, so the conversation keeps its space. Click it anywhere to open it,
+  and the heading to fold it away again (it stays on top while you scroll); it stays as you left
+  it for the rest of the session.
 
   ![Collapsed, the bar shrinks to one line and leaves the space above it free for the conversation](docs/collapsed.png)
 

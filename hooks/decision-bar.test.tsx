@@ -473,6 +473,37 @@ test('the bar starts collapsed; one press expands it', async ($, on) => {
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
 })
 
+test('collapsed, a press on the summary expands the bar too', async ($, on) => {
+  setup(on, false)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, { ...BAND, surface })
+    expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
+    await ui.press({ key: 'summary-toggle' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+    await ui.press({ key: 'toggle' })
+    await ui.unmount()
+  }
+})
+
+test('scrolled down, the expanded bar still draws its heading with the toggle', async ($, on) => {
+  setup(on)
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const scroll = { offset: 6, bodyRows: 10 }
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, { ...BAND, surface, props: { ...BAND.props, scroll } })
+    expect(await ui.find({ key: 'agree-0' })).toBeDefined()
+    await ui.press({ key: 'toggle' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
+    await ui.press({ key: 'toggle' })
+    await ui.unmount()
+  }
+})
+
 test('collapsed and too narrow for two lines: only the counts', async ($, on) => {
   setup(on)
 
