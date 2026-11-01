@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { EngineInterface, On, RenderPropsOf } from 'claude-code'
 
 import type { Row } from '../types'
-import { instructions, mergeProposals, withoutQuestions } from './register'
+import { instructions, mergeProposals, scrolledTo, withoutQuestions } from './register'
 
 const BAND = {
   plugin: 'decision-bar',
@@ -488,20 +488,13 @@ test('collapsed, a press on the summary expands the bar too', async ($, on) => {
   }
 })
 
-test('scrolled down, the expanded bar still draws its heading with the toggle', async ($, on) => {
-  setup(on)
-
-  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
-  const scroll = { offset: 6, bodyRows: 10 }
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await mount($, { ...BAND, surface, props: { ...BAND.props, scroll } })
-    expect(await ui.find({ key: 'agree-0' })).toBeDefined()
-    await ui.press({ key: 'toggle' })
-    await ui.redraw()
-    expect(await ui.find({ key: 'agree-0' })).toBeUndefined()
-    await ui.press({ key: 'toggle' })
-    await ui.unmount()
-  }
+test('the bar scrolls itself: never above the top, and no further than its last row', () => {
+  // 30 rows of tree with 4 scrolled away, in a window of 10.
+  expect(scrolledTo(4, 3, 26, 10)).toBe(7)
+  expect(scrolledTo(4, -9, 26, 10)).toBe(0)
+  expect(scrolledTo(4, 50, 26, 10)).toBe(20)
+  // A tree that fits does not scroll.
+  expect(scrolledTo(0, 3, 8, 10)).toBe(0)
 })
 
 test('collapsed and too narrow for two lines: only the counts', async ($, on) => {

@@ -23,6 +23,10 @@ const hiddenLabels = atom({ plugin: 'decision-bar', key: 'hiddenLabels' } as con
 const lastHidden = atom({ plugin: 'decision-bar', key: 'lastHidden' } as const, null as LastHidden | null)
 // The bar starts collapsed: one line, until the user expands it.
 const collapsed = atom({ plugin: 'decision-bar', key: 'collapsed' } as const, true)
+// Expanded, how many rows the content is scrolled under the heading. The bar scrolls itself, so
+// the heading stays on top: the desktop app scrolls the band before it redraws, so a heading that
+// moves along with the band's own window lags behind and still scrolls away.
+const scrollTop = atom({ plugin: 'decision-bar', key: 'scrollTop' } as const, 0)
 // Proposals (`rowKey`) whose field is being edited: their full-remark line is struck through,
 // as visibly stale text next to the field.
 const editing = atom({ plugin: 'decision-bar', key: 'editing' } as const, [] as string[])
@@ -877,7 +881,10 @@ const barBasics = ($: EngineInterface, v: RowView) => ({
   all: v.stored.map((_, i) => i),
   // With one row no "all": you would look for what else goes along.
   sendLabel: v.t(v.stored.length === 1 ? 'sendOne' : 'sendAll'),
-  toggle: () => commitDrafts($).then(() => update($, collapsed, c => !c)),
+  toggle: () =>
+    commitDrafts($)
+      .then(() => update($, scrollTop, () => 0))
+      .then(() => update($, collapsed, c => !c)),
 })
 
 // Collapsed: one line with the heading as a button, the state of each row, and Send all once
@@ -904,10 +911,10 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
     <Box flexDirection="row" alignItems="center" columnGap={1}>
       <Button key="toggle" label={`${CLOSED} ${t('heading')}`} onPress={toggle} />
       {/* The summary opens the bar too: a Box takes no press, so it is a Button without chrome,
-          dim as before and at full strength under the pointer. A column stretches it across the
-          room up to Send all, so the empty space there opens the bar as well. */}
-      <Box key="summary-box" flexDirection="column" alignItems="stretch" flexGrow={1} flexShrink={1}>
-        <Button key="summary-toggle" label={t('heading')} plain dimColor onPress={toggle}>
+          dim as before and at full strength under the pointer. No label: the desktop app draws a
+          label in place of the children. It takes only its text, never the room beside it. */}
+      <Box key="summary-box" flexGrow={1} flexShrink={1}>
+        <Button key="summary-toggle" plain dimColor onPress={toggle}>
           <Text key="summary" dimColor>
             {lines > 2 ? miniSummary(t, current) : summary}
           </Text>
@@ -918,9 +925,14 @@ const collapsedBar = ($: EngineInterface, v: RowView, columns: number) => {
   )
 }
 
+// Where the bar's own scrolling lands: `top` rows scrolled away now, `by` asked for, a tree of
+// `contentRows` as drawn (already `top` short) in a window of `bodyRows`.
+export const scrolledTo = (top: number, by: number, contentRows: number, bodyRows: number) =>
+  Math.min(Math.max(0, contentRows + top - bodyRows), Math.max(0, top + by))
+
 // Expanded: the heading with the counts, every row, and the buttons that act on all of them.
-// `offset` is the first row the band's window shows: scrolled down, the heading moves along to
-// stay on top, so the bar can always be folded away.
+// `offset` is `scrollTop`: the rows of content scrolled away under the heading, which stays on
+// top so the bar can always be folded away.
 const expandedBar = ($: EngineInterface, v: RowView, offset: number) => {
   const { Box, Button, Text, t, stored, current } = v
   const { all, sendLabel, toggle } = barBasics($, v)
@@ -935,15 +947,14 @@ const expandedBar = ($: EngineInterface, v: RowView, offset: number) => {
   }
   return (
     <Box flexDirection="column" rowGap={1}>
-      <Box key="heading" flexDirection="row" alignItems="center" columnGap={1} marginTop={offset}>
+      <Box key="heading" flexDirection="row" alignItems="center" columnGap={1}>
         <Button key="toggle" label={`${OPENED} ${t('heading')}`} plain onPress={toggle} />
         <Text key="tally" dimColor>
           {headingTally(t, current)}
         </Text>
       </Box>
-      {/* The heading pushes the content down by `offset`; the content moves back up as far, and
-          what then sticks out above sits under the heading and is cut off. The tree keeps its
-          height, so the engine scrolls it as before. */}
+      {/* The content moves up by `offset`; what sticks out above is cut off under the heading.
+          The tree is that much shorter, so the band's own window has nothing to scroll. */}
       <Box key="content-clip" flexDirection="column" overflow="hidden">
         {/* Outside the terminal the chevron sits a little to the right because of the button's
             border: the content moves one cell along so it lines up below it. */}
@@ -1241,6 +1252,21 @@ export const register: Register = (on, options) => {
     )
   })
 
+  // Expanded, the bar scrolls its content itself and keeps the band's window where it is (see
+  // `scrollTop`). `contentRows` is the tree as drawn, already `scrollTop` rows short.
+  on('ui.scroll', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if ((await read($, collapsed)) || (await read($, rows)).length === 0) {
+      return next(e)
+    }
+    const top = await read($, scrollTop)
+    const to = scrolledTo(top, e.by, e.contentRows, e.bodyRows)
+    if (to !== top) {
+      await update($, scrollTop, () => to)
+    }
+    // The band's own window stays at the top, where the heading is.
+    return next({ ...e, offset: 0 })
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Asked to draw the band, also while it is empty: the bar can be seen on this surface.
     drawnOn.add(e.surface)
@@ -1258,6 +1284,6 @@ export const register: Register = (on, options) => {
     const v = await rowView($, table, { surface: e.surface, rows: list, prefix: '', columns: e.props.bodyColumns })
     return (await read($, collapsed))
       ? collapsedBar($, v, e.props.bodyColumns)
-      : expandedBar($, v, e.props.scroll?.offset ?? 0)
+      : expandedBar($, v, await read($, scrollTop))
   })
 }

@@ -2,8 +2,8 @@
 
 ## 1.5.1 — 2026-11-01
 
-- The collapsed bar opens with a click anywhere on its line, not only on the heading. It looks as
-  before; the summary brightens under the pointer.
+- The collapsed bar also opens with a click on the summary of the decisions, not only on the
+  heading. It looks as before; the summary brightens under the pointer.
 - Expanded, the heading stays on top while you scroll through many decisions, so the bar can
   always be folded away.
 - On a narrow screen, buttons that wrap to a new line no longer overlap, and a text below them
