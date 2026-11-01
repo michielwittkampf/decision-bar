@@ -17,7 +17,6 @@ declare module 'claude-code' {
       hiddenLabels: string[]
       lastHidden: LastHidden | null
       collapsed: boolean
-      scrollTop: number
       editing: string[]
       answered: Record<string, string>
       answeredRemarks: Record<string, string>
