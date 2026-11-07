@@ -13,6 +13,12 @@ disagree or add a remark, and send one or all at once.
 
 ## Install
 
+In the desktop app:
+
+```
+Click + next to the prompt box, then Plugins → Add marketplace → michielwittkampf/decision-bar → Add plugin
+```
+
 At the prompt of a terminal session:
 
 ```
@@ -23,12 +29,6 @@ From a shell:
 
 ```bash
 claude plugin install decision-bar --marketplace michielwittkampf/decision-bar
-```
-
-In the desktop app:
-
-```
-Click + next to the prompt box, then Plugins → Add marketplace → michielwittkampf/decision-bar → Add plugin
 ```
 
 Works in the desktop app (Code tab) and in the terminal, and on mobile with buttons only. Not yet
