@@ -13,13 +13,7 @@ disagree or add a remark, and send one or all at once.
 
 ## Install
 
-In the desktop app:
-
-```
-Click + next to the prompt box, then Plugins → Add marketplace → michielwittkampf/decision-bar → Add plugin
-```
-
-At the prompt of a terminal session:
+At the prompt in the desktop app or in a terminal session:
 
 ```
 /plugin install decision-bar --marketplace michielwittkampf/decision-bar
