@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Decision box in the chat</title>
+<link rel="stylesheet" href="style.css">
+<style>html, body { width: 931px; } html, body { background: #fff; }</style>
+</head>
+<body>
+<div id="shot" class="chat">
+  <p>For the night-shift release, two things are ready to go. Dark mode is done and tested on the late-shift tablets. The espresso warning works too, but the threshold is a judgement call: five before noon catches the regulars, and some might find that preachy.</p>
+
+  <div class="box">
+    <div class="heading"><span class="title">Decisions</span><span class="tally">1 open<span class="dot">·</span>1 chosen</span></div>
+
+    <div class="row closed">
+      <div class="label">Dark mode</div>
+      <div class="proposal">Ship dark mode for the night shift.</div>
+      <div class="below">→ Tonight, with celebrations till dawn.</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Decaf</div>
+      <div class="proposal">Show a gentle warning when someone orders their fifth espresso before noon.</div>
+      <div class="controls">
+        <span class="btn"><span class="mark"></span>agree</span>
+        <span class="btn"><span class="mark"></span>disagree</span>
+        <span class="field" style="width: 210px">Seven is fine. Be gentle.</span>
+        <span class="btn">send</span>
+      </div>
+      <div class="below">Seven is fine. Be gentle.</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Auth</div>
+      <div class="proposal">Let colleagues sign in with the company SSO. And reward them generously with...</div>
+      <div class="controls">
+        <span class="select">High Fives</span>
+        <span class="field empty">remark (optional)</span>
+        <span class="btn">send</span>
+      </div>
+    </div>
+
+    <div class="actions"><span class="btn primary">Send all</span></div>
+  </div>
+
+  <p>Meanwhile I’ll finish the order history export, which doesn’t depend on either choice. Once you’ve decided, the release build is ready in about an hour.</p>
+</div>
+</body>
+</html>

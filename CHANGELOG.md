@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- README: new screenshots showing answers of its own (as buttons, and as a menu, opened in the
+  Dutch one), an answer's longer text, an answered decision in the chat box and the collapsed bar's
+  state per decision. They are drawn as pages in `docs/screenshots/` after the desktop app, and
+  `render.sh` turns them into PNGs.
+- README: shorter, for someone who just wants to install. What the mod does is now in
+  `docs/how-it-works.md`, the wishlist for Claude Code in `docs/what-would-make-it-better.md`, and
+  working on the mod in `DEVELOPING.md`. Claude is told to read those when you ask it to change the
+  mod.
+
 ## 1.5.1 — 2026-11-01
 
 - On a narrow screen, buttons that wrap to a new line no longer overlap, and a text below them

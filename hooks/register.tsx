@@ -317,7 +317,7 @@ export const instructions = (questionInBar: boolean) => [
   questionInBar ? CLOSING_QUESTION_ALWAYS : CLOSING_QUESTION_WHILE_OPEN,
   'Bar language: the bar starts each session in English; after that it is the `language` of your last call in this session. Make a call with only `language` (it changes nothing but the language) only at the end of a turn in which the chat language changed while the bar has open rows. Otherwise no extra call.',
   'Answers arrive as "<label> <agree>: <proposal>", "<label> <disagree>: <proposal>", "<label> → <answer>: <proposal>" (one of its own answers) or "<label> (no decision yet)", with any remark on its own line below starting with "↳", in the bar language.',
-  'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read the README.md in its folder (behaviour, files, testing, pitfalls).',
+  'This bar is the Claude Code mod `decision-bar`; if the user wants to change it, first read DEVELOPING.md in its folder (files, testing, pitfalls) and docs/how-it-works.md (behaviour).',
 ].join('\n')
 
 // One line (with any remark below it) per proposal; empty when there is nothing to report.
@@ -536,7 +536,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   // Sent as the user, because these are the user's answers, and only from a press of Send, Send
   // all, Agree or Enter in a remark field: no hook sends. The message holds the rows' labels,
   // proposals and chosen answers (checked, see the comment above `languageCode`), the bar's texts
-  // and what the user typed, nothing else read from the session. README: "What the mod does".
+  // and what the user typed, nothing else read from the session. docs/how-it-works.md.
   // A blank line between answers, so each stands on its own in the chat.
   await $.prompt.submit({ text: lines.join('\n\n') + TRAILER, asUser: true })
   return true
@@ -1043,7 +1043,7 @@ export const register: Register = (on, options) => {
   })
 
   // Adds one section of its own, `instructions`: how Claude uses the bar. Everything else Claude is
-  // told passes through unchanged. README: "What the mod does".
+  // told passes through unchanged. docs/how-it-works.md.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
 

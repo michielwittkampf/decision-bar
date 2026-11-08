@@ -1,0 +1,130 @@
+/* Reconstruction of the desktop app's look around the decision bar, for the README screenshots.
+   render.sh turns each page into a PNG. The font is the desktop app's own, read from the installed
+   app at render time and not kept in this repository; without it the system font is used. */
+@font-face {
+  font-family: "Anthropic Sans";
+  src: url("file:///Applications/Claude.app/Contents/Resources/fonts/AnthropicSans-Romans-Variable-25x258.ttf");
+  font-weight: 100 900;
+}
+
+:root {
+  --page: #151515;
+  --bar: #212121;
+  --button: #373737;
+  --field: #2c2c2c;
+  --field-border: #414141;
+  --text: #f0efec;
+  --dim: #8f8e8d;
+  --primary: #ffffff;
+  --primary-text: #0b0b0b;
+  --prompt: #20201f;
+  --prompt-border: #363635;
+  --prompt-text: #8a8984;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: "Anthropic Sans", -apple-system, "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+
+#shot { padding: 7px 7px 6px; }
+
+/* The band above the prompt */
+.bar {
+  background: var(--bar);
+  border-radius: 10px;
+  padding: 14px 20px 12px 20px;
+}
+
+.heading { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+.heading .title { font-size: 15px; }
+.heading .title::before { content: "▼"; font-size: 10px; margin-right: 8px; position: relative; top: -1px; }
+.tally { color: var(--dim); }
+.tally .dot { margin: 0 10px; }
+
+.row { display: grid; grid-template-columns: var(--label, 113px) 1fr; column-gap: 0; margin-bottom: 16px; }
+.label { font-weight: 600; }
+.proposal { grid-column: 2; }
+.controls { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin-top: 10px; }
+.below { grid-column: 2; color: var(--dim); margin-top: 10px; }
+
+.btn {
+  display: inline-flex; align-items: center; height: 23px; padding: 0 7px;
+  background: var(--button); border-radius: 4px; color: var(--text); white-space: nowrap;
+}
+.btn.primary { background: var(--primary); color: var(--primary-text); }
+/* ● and ○ as drawn in the app: a circle about as tall as a capital */
+.btn .mark { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px;
+  border: 1.3px solid currentColor; font-size: 0; }
+.btn .mark.on { background: currentColor; }
+
+.field {
+  display: inline-flex; align-items: center; height: 23px; width: 200px; padding: 0 7px;
+  background: var(--field); border: 1px solid var(--field-border); border-radius: 4px; color: var(--text);
+  white-space: nowrap; overflow: hidden;
+}
+.field.empty { color: var(--dim); }
+
+.select {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 18px; height: 23px; padding: 0 8px;
+  background: var(--field); border: 1px solid var(--field-border); border-radius: 4px; color: var(--text);
+  white-space: nowrap;
+}
+.select::after { content: "⌄"; color: var(--dim); position: relative; top: -3px; }
+
+.actions { display: flex; gap: 10px; margin-top: 4px; }
+
+/* Collapsed bar */
+.bar.collapsed { display: flex; align-items: center; gap: 10px; padding: 12px 10px; }
+.bar.collapsed .toggle { height: 24px; padding: 0 7px; }
+.bar.collapsed .toggle::before { content: "▶"; font-size: 9px; margin-right: 8px; }
+.summary { flex: 1; color: var(--dim); }
+.summary .sep { margin: 0 12px; }
+.summary .mark { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1.3px solid currentColor;
+  margin-left: 4px; position: relative; top: 1px; }
+.summary .mark.on { background: currentColor; }
+
+/* The prompt below */
+.prompt {
+  margin-top: 8px; height: 52px; border: 1px solid var(--prompt-border); border-radius: 12px;
+  background: var(--prompt); display: flex; align-items: center; padding: 0 18px; color: var(--prompt-text);
+  font-size: 17px;
+}
+.prompt .plus { font-size: 28px; font-weight: 250; margin-right: 22px; color: #c3c2b8; }
+.prompt .mic { margin-left: auto; width: 16px; height: 18px; color: #c3c2b8; }
+
+/* The chat, around a decision box */
+#shot.chat { padding: 22px 44px 34px; background: var(--page); }
+.chat p { margin: 0; font-size: 16px; line-height: 1.5; }
+.box {
+  border: 1px solid #3a3a3a; border-radius: 10px; padding: 12px 10px 10px; margin: 20px -5px 22px;
+}
+.box .heading { gap: 10px; margin-bottom: 14px; }
+.box .heading .title { font-weight: 600; }
+.box .heading .title::before { content: none; }
+.closed .label, .closed .proposal, .closed .below { color: var(--dim); }
+.closed .below { margin-top: 2px; }
+/* The chat fades out above and below, as a cut-out of a longer conversation */
+.chat { position: relative; }
+.chat::before, .chat::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; pointer-events: none; }
+.chat::before { top: 0; background: linear-gradient(#fff, rgba(21, 21, 21, 0)); }
+.chat::after { bottom: 0; background: linear-gradient(rgba(21, 21, 21, 0), #fff); }
+
+/* A menu (Select) opened: the list of answers below it, the current one checked */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu {
+  position: absolute; top: 27px; left: 0; z-index: 2; min-width: 100%; padding: 5px;
+  background: #2a2a2a; border: 1px solid #454545; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.menu div { padding: 3px 26px 3px 24px; border-radius: 5px; white-space: nowrap; position: relative; }
+.menu .none { color: var(--dim); }
+.menu .current::before { content: "✓"; position: absolute; left: 8px; }
+.menu .hover { background: #3b5bdb; color: #fff; }

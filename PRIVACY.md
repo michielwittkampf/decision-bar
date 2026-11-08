@@ -16,4 +16,4 @@ your own answers, back into the same conversation.
 Once your answers are in the conversation, they are like anything else you type to Claude, under
 Anthropic's privacy policy for Claude Code.
 
-Every hook and what it reads or changes: [What the mod does](README.md#what-the-mod-does).
+Every hook and what it reads or changes: [What the mod does](docs/how-it-works.md).
