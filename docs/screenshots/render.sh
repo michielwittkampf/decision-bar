@@ -20,7 +20,9 @@ for name in "${names[@]}"; do
     --force-device-scale-factor=2 --window-size="${width},900" --virtual-time-budget=2000 \
     --screenshot="$tmp/$name.png" "file://$page" >/dev/null 2>&1
   # Cut off the empty page below the content (rows equal to the page colour).
-  python3 - "$tmp/$name.png" "$out/$name.png" <<'PY'
+  # data-fade="N" on <body>: the top and bottom N CSS pixels fade out to transparent.
+  fade=$(sed -n 's/.*<body data-fade="\([0-9]*\)".*/\1/p' "$page" | head -1)
+  python3 - "$tmp/$name.png" "$out/$name.png" "${fade:-0}" <<'PY'
 import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
@@ -31,7 +33,18 @@ bottom = h
 near = lambda c: max(abs(a - b) for a, b in zip(c, bg)) <= 6  # a soft shadow counts as empty
 while bottom > 1 and all(near(px[x, bottom - 1]) for x in range(0, w, 2)):
     bottom -= 1
-im.crop((0, 0, w, min(h, bottom + 12))).save(sys.argv[2], optimize=True)
+im = im.crop((0, 0, w, min(h, bottom + 12)))
+fade = int(sys.argv[3]) * 2  # the page is rendered at twice the size
+if fade:
+    w, h = im.size
+    alpha = Image.new("L", (w, h), 255)
+    for y in range(fade):
+        t = y / fade
+        a = round(255 * t * t * (3 - 2 * t))  # smoothstep, as the earlier screenshot did
+        alpha.paste(a, (0, y, w, y + 1))
+        alpha.paste(a, (0, h - 1 - y, w, h - y))
+    im.putalpha(alpha)
+im.save(sys.argv[2], optimize=True)
 PY
   echo "docs/$name.png"
 done

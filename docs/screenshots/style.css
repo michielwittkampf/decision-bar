@@ -111,11 +111,7 @@ html, body {
 .box .heading .title::before { content: none; }
 .closed .label, .closed .proposal, .closed .below { color: var(--dim); }
 .closed .below { margin-top: 2px; }
-/* The chat fades out above and below, as a cut-out of a longer conversation */
-.chat { position: relative; }
-.chat::before, .chat::after { content: ""; position: absolute; left: 0; right: 0; height: 60px; pointer-events: none; }
-.chat::before { top: 0; background: linear-gradient(#fff, rgba(21, 21, 21, 0)); }
-.chat::after { bottom: 0; background: linear-gradient(rgba(21, 21, 21, 0), #fff); }
+/* The chat fades out to transparent above and below: data-fade on <body>, applied by render.sh. */
 
 /* A menu (Select) opened: the list of answers below it, the current one checked */
 .menu-wrap { position: relative; display: inline-flex; }
