@@ -46,7 +46,8 @@ in a side chat of the desktop app, where Claude asks in the chat instead
 
 - **Nothing gets lost.** A decision stays visibly open until you answer it. Answered it in the
   chat, or has it been overtaken? Claude takes it off the list. Hidden decisions come back with
-  `/decisions`.
+  `/decisions`; with nothing hidden, `/decisions` has Claude put the decisions still open in the
+  conversation back, for when the bar lost them (after a rewind, for example).
 - **More than yes or no.** Agree or disagree with a remark, or send just a remark: it goes out
   with the decision it is about, so Claude knows exactly what it refers to. Where the answer is
   not yes or no, Claude gives the decision its own answers ("Commit now", "Run the tests first",

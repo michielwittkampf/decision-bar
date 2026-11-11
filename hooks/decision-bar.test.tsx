@@ -48,7 +48,7 @@ const NL = {
   undecided: '{label} (nog geen beslissing)',
   messageRemark: 'Opmerking: {remark}',
   commandRestored: '{n} beslissing(en) staan weer boven het invoerveld.',
-  commandEmpty: 'Er zijn geen verborgen beslissingen om terug te halen.',
+  commandAsked: 'Claude zet de open beslissingen uit dit gesprek terug in de balk.',
 }
 
 const mount = async ($: EngineInterface, spec: Parameters<EngineInterface['ui']['mount']>[0]) => {
@@ -59,6 +59,13 @@ const mount = async ($: EngineInterface, spec: Parameters<EngineInterface['ui'][
     await ui.redraw()
   }
   return ui
+}
+
+// Lets a timer of the mod's (`$.clock.after(0, …)`) run and what it submits arrive.
+const settle = async () => {
+  for (let i = 0; i < 20; i++) {
+    await Promise.resolve()
+  }
 }
 
 const PROPOSALS = [
@@ -93,6 +100,8 @@ const setup = (on: On, expanded = true) => {
     store.set(e.key, e.value)
     return { value: undefined }
   })
+  // Timers: the test kit has no clock; answered at once, so `fn` runs right away.
+  on('clock.after', () => ({ value: undefined }))
   // Stands in for the desktop app, which answers wrap_up itself.
   on('tool.call', () => ({ result: 'ok' }))
   return sent
@@ -406,8 +415,63 @@ test('the Restore row goes away on the next message; /decisions still works', as
   await ui.redraw()
   expect(await ui.find({ key: 'agree-0' })).toBeDefined()
 
-  const empty = await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
-  expect(empty.text).toContain('No hidden decisions')
+})
+
+test('/decisions with nothing hidden asks Claude to put the open decisions back', async ($, on) => {
+  const sent = setup(on)
+  on('command.run', () => ({ text: '' }))
+
+  // An empty bar, as after a rewind: one message, the mod's fixed request, as the user's.
+  const asked = await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  expect(asked.text).toContain('Asking Claude')
+  await settle()
+  expect(sent.length).toBe(1)
+  expect(sent[0]).toContain('still open in this conversation back into the decision bar')
+  expect(sent[0]).toContain('The bar is empty now.')
+
+  // With rows in the bar and nothing hidden, Claude hears which labels are there already.
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  await settle()
+  expect(sent[1]).toContain('The bar holds now: T1;')
+})
+
+test('/decisions restores hidden ones first and asks nothing; the next time it asks', async ($, on) => {
+  const sent = setup(on)
+  on('command.run', () => ({ text: '' }))
+
+  await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'hide' })
+  const back = await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  expect(back.text).toContain('3 decision(s)')
+  await settle()
+  expect(sent.length).toBe(0)
+
+  await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  await settle()
+  expect(sent.length).toBe(1)
+})
+
+test('/decisions lets Claude put back labels the user hid earlier', async ($, on) => {
+  setup(on)
+  on('command.run', () => ({ text: '' }))
+
+  // T1 hidden, then T2 hidden: only T2 is the last hidden group, T1 stays a hidden label.
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  const ui = await mount($, { ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'hide' })
+  await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[1]!] })
+  await ui.redraw()
+  await ui.press({ key: 'hide' })
+  await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  const skipped = await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  expect(String(skipped.result)).toContain('hidden earlier by the user: T1')
+
+  // Nothing left to restore: /decisions asks Claude, and T1 is no longer kept out.
+  await $.command.run({ command: 'decisions', args: '' } as Parameters<typeof $.command.run>[0])
+  const res = await $.tool.call({ tool: TOOL, ...EN, proposals: [PROPOSALS[0]!] })
+  expect(String(res.result)).toContain('Added: T1.')
 })
 
 test('the send button with an empty field passed still sends the typed remark', async ($, on) => {

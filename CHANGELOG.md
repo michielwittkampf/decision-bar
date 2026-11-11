@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `/decisions` with nothing hidden to bring back now has Claude put the decisions still open in
+  the conversation back into the bar, as typing "put them in the bar" did. This covers a bar that
+  went empty after a rewind, or for another reason, while decisions were still open.
 - README: new screenshots showing answers of its own (as buttons, and as a menu, opened in the
   Dutch one), an answer's longer text, an answered decision in the chat box and the collapsed bar's
   state per decision. They are drawn as pages in `docs/screenshots/` after the desktop app, and

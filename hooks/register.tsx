@@ -64,7 +64,7 @@ const EN = {
   undecided: '{label} (no decision yet)',
   messageRemark: 'Remark: {remark}',
   commandRestored: '{n} decision(s) back above the prompt.',
-  commandEmpty: 'No hidden decisions to restore.',
+  commandAsked: 'Asking Claude to put the open decisions from this conversation back into the bar.',
 } as const
 type TextKey = keyof typeof EN
 type Translate = (k: TextKey, vars?: Record<string, string | number>) => string
@@ -463,6 +463,19 @@ const restore = async ($: EngineInterface): Promise<number> => {
   await update($, lastHidden, () => null)
   return back.length
 }
+
+// What /decisions asks Claude when it has nothing hidden to bring back: the bar can lose decisions
+// that are still open in the conversation (after a rewind, among others), and Claude, who reads the
+// conversation, can put them back. Fixed text: only the labels now in the bar are filled in, and
+// they were cleaned when Claude put them there.
+export const resyncRequest = (labels: string[]) =>
+  [
+    'Put the decisions that are still open in this conversation back into the decision bar, with the decisions tool: each with its label, proposal and answers of its own, in full, also when you put it there before (the bar may have lost it, for example after a rewind).',
+    labels.length > 0
+      ? `The bar holds now: ${labels.join(', ')}; leave those as they are unless they changed.`
+      : 'The bar is empty now.',
+    'Leave out what was answered or no longer applies. If nothing is open, say so in one line.',
+  ].join(' ')
 
 const clear = async ($: EngineInterface) => {
   drafts.clear()
@@ -1029,17 +1042,30 @@ export const register: Register = (on, options) => {
     })
     await $.command.register({
       name: COMMAND,
-      description: 'Bring the last hidden decisions back into the bar',
+      description: 'Bring hidden decisions back, or have Claude put the open ones back into the bar',
     })
 
     return next(e)
   })
 
   // Only this mod's own /decisions command (the matcher); other commands never reach this hook.
+  // First what the user hid last. With nothing hidden, the bar may have lost decisions that are
+  // still open (a rewind, among others): Claude reads the conversation and puts them back, as when
+  // the user asks for that in their own words. Labels hidden earlier no longer stand in the way.
   on('command.run', { command: COMMAND }, async $ => {
     const count = await restore($)
     const t = await currentTranslator($)
-    return { text: count > 0 ? t('commandRestored', { n: count }) : t('commandEmpty') }
+    if (count > 0) {
+      return { text: t('commandRestored', { n: count }) }
+    }
+    await update($, hiddenLabels, () => [])
+    const labels = (await read($, rows)).map(row => row.p.label)
+    // The user's own command, with the mod's fixed text: nothing Claude wrote goes out as theirs.
+    // Not from this hook itself: the engine refuses a submit that would wait on the turn this
+    // hook holds. Right after it instead; the prompt starts its own turn once the session is idle.
+    const text = resyncRequest(labels)
+    $.clock.after(0, () => void $.prompt.submit({ text, asUser: true }).catch(() => undefined))
+    return { text: t('commandAsked') }
   })
 
   // Adds one section of its own, `instructions`: how Claude uses the bar. Everything else Claude is
