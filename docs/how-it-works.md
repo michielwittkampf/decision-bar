@@ -19,7 +19,9 @@ The short version is in [PRIVACY.md](../PRIVACY.md); the details are below.
   remark field, or run `/decisions` with nothing hidden (see below), does the mod submit a message
   in your name (`$.prompt.submit`), to the same conversation. It holds your answers and what they answer: a line per decision,
   `<label> <agree|disagree>: <proposal>`, `<label> → <answer>: <proposal>` or
-  `<label> (no decision yet)`, with your remark on its own line below. Label, proposal and answer
+  `<label> (no decision yet)`, with your remark on its own line below. With `…` chosen (in a menu:
+  "other…") the remark is your answer: `<label> → <your text>: <proposal>`, and the decision leaves
+  the bar as with any other answer; without text nothing goes out for it. Label, proposal and answer
   are the ones Claude put in the bar, and an answer is sent exactly as the row shows it (an answer's
   longer text appears below the row as soon as you choose it); each
   is cut to one plain line of limited length, without invisible characters (joiners and direction

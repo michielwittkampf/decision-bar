@@ -2,8 +2,9 @@
 // own in place of agree and disagree, each with an optional longer text (`details`, same order; ''
 // for none) that is sent in its place.
 export type Proposal = { label: string; text: string; options?: string[]; details?: string[] }
-// Agree, disagree, the index of the chosen answer button, or nothing yet.
-export type Decision = 'agree' | 'disagree' | number | null
+// Agree, disagree, the index of the chosen answer button, an answer the user writes in the remark
+// field ('own', the "…" choice), or nothing yet.
+export type Decision = 'agree' | 'disagree' | 'own' | number | null
 // A row of the bar: the proposal with its choice and remark.
 export type Row = { p: Proposal; d: Decision; r: string }
 // The last hidden set: each row with its choice and remark.
