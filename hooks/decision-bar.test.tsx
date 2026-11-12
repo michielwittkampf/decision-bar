@@ -1592,25 +1592,25 @@ test('a duplicate answer lends its text to the first one without; a row with tex
   expect(withoutQuestions([rowWithTexts, QUESTION])).toEqual([rowWithTexts])
 })
 
-// "…": the remark field holds the answer, and the decision leaves the bar like any other answer.
+// The field's circle: the remark field holds the answer, and the decision leaves the bar like any other answer.
 
-test('"…" makes the remark the answer: the field asks for it, and the row goes once sent', async ($, on) => {
+test('the circle before the field makes the remark the answer: the field asks for it, and the row goes once sent', async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
   const ui = await mount($, { ...BAND, surface: 'desktop' })
-  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○ …')
+  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○')
   expect((await ui.find({ key: 'remark-0' }))?.props.placeholder).toBe('remark (optional)')
 
   await ui.press({ key: 'own-0' })
   await ui.redraw()
-  expect((await ui.find({ key: 'own-0' }))?.text).toBe('● …')
+  expect((await ui.find({ key: 'own-0' }))?.text).toBe('●')
   expect((await ui.find({ key: 'remark-0' }))?.props.placeholder).toBe('answer')
 
   // Another choice: a remark again.
   await ui.press({ key: 'agree-0' })
   await ui.redraw()
-  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○ …')
+  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○')
   expect((await ui.find({ key: 'remark-0' }))?.props.placeholder).toBe('remark (optional)')
 
   await ui.press({ key: 'own-0' })
@@ -1620,7 +1620,7 @@ test('"…" makes the remark the answer: the field asks for it, and the row goes
   expect(await ui.find({ type: 'Text', text: /^T1$/ })).toBeUndefined()
 })
 
-test('"…" without an answer sends nothing for that row; it stays with its choice', async ($, on) => {
+test("the field's circle without an answer sends nothing for that row; it stays with its choice", async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS })
@@ -1634,15 +1634,15 @@ test('"…" without an answer sends nothing for that row; it stays with its choi
   expect(sent).toEqual(['T2 agree: orange penguin'])
   await ui.redraw()
   expect(await ui.find({ type: 'Text', text: /^T1$/ })).toBeDefined()
-  expect((await ui.find({ key: 'own-0' }))?.text).toBe('● …')
+  expect((await ui.find({ key: 'own-0' }))?.text).toBe('●')
 })
 
-test('"…" next to two answers of its own, and as the last entry of a menu', async ($, on) => {
+test("the field's circle next to two answers of its own, and as the last entry of a menu", async ($, on) => {
   const sent = setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: [TESTS, RELEASE] })
   const ui = await mount($, { ...BAND, surface: 'desktop' })
-  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○ …')
+  expect((await ui.find({ key: 'own-0' }))?.text).toBe('○')
   // The menu has it as an entry, not as a button.
   expect(await ui.find({ key: 'own-1' })).toBeUndefined()
   const menu = await ui.find({ key: 'answers-1' })
@@ -1678,7 +1678,7 @@ test('a written answer counts as chosen, not as a remark; Agree to all leaves it
   expect(sent).toEqual(['T1 → coffee: tea on Tuesday\n\nT2 agree: orange penguin'])
 })
 
-test('the chat box shows a written answer as the answer; mobile offers no "…"', async ($, on) => {
+test('the chat box shows a written answer as the answer; mobile offers no circle', async ($, on) => {
   setup(on)
 
   await $.tool.call({ tool: TOOL, ...EN, proposals: PROPOSALS.slice(0, 2) })
@@ -1687,10 +1687,10 @@ test('the chat box shows a written answer as the answer; mobile offers no "…"'
   await bar.input({ key: 'remark-1', text: 'teal', kind: 'change' })
   await bar.press({ key: 'agree-0' })
 
-  // The terminal chat box takes no keys: no "…" to choose, but the choice made in the bar shows.
+  // The terminal chat box takes no keys: no circle to choose, but the choice made in the bar shows.
   const terminal = await mount($, { ...chatRow(PROPOSALS.slice(0, 2)), surface: 'terminal' })
   expect(await terminal.find({ key: 'chat-call-1-own-0' })).toBeUndefined()
-  expect((await terminal.find({ key: 'chat-call-1-own-1' }))?.text).toBe('● …')
+  expect((await terminal.find({ key: 'chat-call-1-own-1' }))?.text).toBe('●')
   expect(await terminal.find({ type: 'Text', text: '→ teal' })).toBeDefined()
 
   const mobile = await mount($, { ...chatRow(PROPOSALS.slice(0, 2)), surface: 'mobile' })

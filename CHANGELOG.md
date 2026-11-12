@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Your own answer: next to agree and disagree, or the decision's own answers, a choice `…` (in a
-  menu: "other…") makes the remark field your answer. Its grey text then says "answer"; the line
+- Your own answer: next to agree and disagree, or the decision's own answers, a circle just before
+  the remark field (in a menu: "other…") makes that field your answer. Its grey text then says "answer"; the line
   sent is `<label> → <your text>: <proposal>`, and the decision leaves the bar like any other
   answer. A remark without that choice works as before and leaves the decision open. Agree to all
   leaves a written answer as it is. Not on mobile, which has no remark field.

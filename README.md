@@ -52,8 +52,8 @@ in a side chat of the desktop app, where Claude asks in the chat instead
   with the decision it is about, so Claude knows exactly what it refers to. Where the answer is
   not yes or no, Claude gives the decision its own answers ("Commit now", "Run the tests first",
   "Not yet"): two as buttons, more in a menu. An answer can carry a longer text, which the row
-  shows in full once you choose it, and which is what is sent. None of them fits? Choose `…` (in a
-  menu: "other…") and type your own answer in the field: it is sent as the answer, and the
+  shows in full once you choose it, and which is what is sent. None of them fits? Choose the circle
+  just before the remark field (in a menu: "other…") and type your own answer in the field: it is sent as the answer, and the
   decision leaves the bar.
 - **Out of the way when you need the room.** The bar starts collapsed: a single line with the
   state of every decision, so the conversation keeps its space. Click the heading to open it, and

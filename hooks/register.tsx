@@ -138,10 +138,6 @@ const checkTranslation = (input: unknown) => {
   return { accepted, rejected }
 }
 
-// The choice "my remark is the answer": short, the field's placeholder (`ownField`) says the rest.
-// Not translated: like ○ and ●, a sign rather than a word.
-const OWN = '…'
-
 // Collapse/expand: medium triangles (⏵ ⏷). The small ones (▸ ▾) were too small to make out,
 // the full ones (▶ ▼) too heavy.
 const CLOSED = '⏵'
@@ -496,7 +492,7 @@ const clear = async ($: EngineInterface) => {
 }
 
 // Sends the lines for `indexes`. A proposal with a decision disappears; a proposal with only a
-// remark stays open, without that remark. With "…" chosen the remark is the answer, and the
+// remark stays open, without that remark. With the field's own circle chosen the remark is the answer, and the
 // proposal disappears as with any other answer.
 const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): Promise<boolean> => {
   await commitDrafts($)
@@ -527,7 +523,7 @@ const send = async ($: EngineInterface, indexes: number[], agreeToAll = false): 
   }
 
   const sent = new Set(indexes)
-  // "…" without a written answer sent nothing, so it stays too, with its choice.
+  // The field's circle without a written answer sent nothing, so it stays too, with its choice.
   const unanswered = (row: Row) => row.d === null || (row.d === 'own' && !row.r.trim())
   const stays = (i: number) => !sent.has(i) || unanswered(list[i]!)
   const keep = list.map((_, i) => i).filter(stays)
@@ -656,7 +652,7 @@ type RowView = Elements & {
   labelWidth: number
   fieldWidth: (buttons: string[]) => number
   remarkAsText: boolean
-  // Whether "…" (the remark is the answer) is offered: only where a field can be typed in.
+  // Whether the field's circle (the remark is the answer) is offered: only where a field can be typed in.
   writable: boolean
 }
 
@@ -814,10 +810,10 @@ const choiceWidths = (v: RowView, p: Proposal) => {
     const entries = [v.t('chooseAnswer'), ...p.options, ...(v.writable ? [v.t('ownAnswer')] : [])]
     return [entries.reduce((a, b) => ([...b].length > [...a].length ? b : a)) + ' ▾']
   }
-  return [...(p.options ?? [v.t('agree'), v.t('disagree')]), ...(v.writable ? [OWN] : [])].map(o => `○ ${o}`)
+  return [...(p.options ?? [v.t('agree'), v.t('disagree')]).map(o => `○ ${o}`), ...(v.writable ? ['○'] : [])]
 }
 
-// Whether a row offers "…": where a field can be typed in, or where it was chosen already (a chat
+// Whether a row offers the field's circle: where a field can be typed in, or where it was chosen already (a chat
 // box in the terminal shows the choice made in the bar).
 const offersOwn = (v: RowView, d: Decision) => v.writable || d === 'own'
 
@@ -880,11 +876,12 @@ const decisionRow = (v: RowView, p: Proposal, i: number) => {
             />,
           ]
         )}
-        {/* "…": the remark field holds the answer. A menu has it as its last entry instead. */}
+        {/* A circle of its own just before the field: chosen, the field holds the answer, and its
+            placeholder (`ownField`) says so. A menu has it as its last entry instead. */}
         {!(p.options && v.Select && p.options.length >= SELECT_FROM) && offersOwn(v, d) && (
           <Button
             key={`${k}own-${i}`}
-            label={`${d === 'own' ? '●' : '○'} ${OWN}`}
+            label={d === 'own' ? '●' : '○'}
             variant={d === 'own' ? 'primary' : 'secondary'}
             onPress={() => v.choose(i, 'own', p)}
           />

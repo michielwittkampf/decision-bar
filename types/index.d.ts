@@ -3,7 +3,7 @@
 // for none) that is sent in its place.
 export type Proposal = { label: string; text: string; options?: string[]; details?: string[] }
 // Agree, disagree, the index of the chosen answer button, an answer the user writes in the remark
-// field ('own', the "…" choice), or nothing yet.
+// field ('own', the circle just before the field), or nothing yet.
 export type Decision = 'agree' | 'disagree' | 'own' | number | null
 // A row of the bar: the proposal with its choice and remark.
 export type Row = { p: Proposal; d: Decision; r: string }
